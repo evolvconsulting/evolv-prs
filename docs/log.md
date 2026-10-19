@@ -7,3 +7,6 @@
 - 2026-10-19T12:55:14-05:00 db8b9249071c014065a3252901b6f89fc31ab53c Record PRS-3 progress: fix in PR #5, ACs verified
 - 2026-10-19T13:12:59-05:00 fcf5c44e289653f7597622593cd87532970e7f85 Record pr-pane 0.3.0/0.3.1 in quest and lore; open PRS-3 (#4)
 - 2026-10-19T13:14:40-05:00 1b6d59abf63e6a5179f508a62655b1bf3c2f0298 pr-pane 0.3.3: name a configure command that works (PRS-4)
+- 2026-10-19T13:21:40-05:00 acd902354ff64681970c91f09d93d6949e501fb3 pr-pane 0.3.3: name a configure command that works (PRS-4) (#6)
+- 2026-10-19T13:33:30-05:00 a1b5a3eaf191b7a55d2693c455e4a35f25876151 pr-pane 0.3.4: make the /prs autoOpen shell hint pasteable (PRS-5)
+- 2026-10-19T13:34:17-05:00 9528e1eea398226e117e1798a256be5b9d6a77f9 Fix pane.test.ts typing for tsc (command.run text may be undefined)
