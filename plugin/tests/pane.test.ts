@@ -4,8 +4,9 @@ import type { On } from 'claude-code'
 
 // Every hint line must paste into a shell as printed: the only pipe is the leading `echo '{...}' |`, its value
 // is a real boolean, and nothing else holds <, > or |, which a shell would read as a redirect or another pipe.
-function expectPasteable(text: string, values: string[]): void {
-  const lines = text.split('\n').slice(1)
+function expectPasteable(text: string | undefined, values: string[]): void {
+  expect(text).toBeDefined()
+  const lines = (text ?? '').split('\n').slice(1)
   const commands = lines.map(line => line.trim()).filter(line => line.startsWith('echo '))
   expect(commands.map(line => /^echo '\{"autoOpen":"(true|false)"\}' \| (.*)$/.exec(line)?.[1])).toEqual(values)
   for (const line of commands) expect(/[<>|]/.test(line.replace(/^echo '[^']*' \| /, ''))).toBe(false)
