@@ -183,7 +183,8 @@ const INSTALL_ID = 'pr-pane@evolv-marketplace'
 function configure(values: boolean[]): string {
   return [
     'Change it in /config in an interactive session, or from a shell:',
-    ...values.map(isOn => `  echo '{"autoOpen":"${isOn}"}' | claude plugin configure ${INSTALL_ID} --values-stdin`),
+    // Unindented: a line pasted with a leading space is left out of shell history (HISTCONTROL, HIST_IGNORE_SPACE).
+    ...values.map(isOn => `echo '{"autoOpen":"${isOn}"}' | claude plugin configure ${INSTALL_ID} --values-stdin`),
     'If you installed pr-pane from somewhere else, use the id that claude plugin list shows.',
   ].join('\n')
 }

@@ -2,15 +2,19 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-// Every hint line must paste into a shell as printed: the only pipe is the leading `echo '{...}' |`, its value
-// is a real boolean, and nothing else holds <, > or |, which a shell would read as a redirect or another pipe.
-function expectPasteable(text: string | undefined, values: string[]): void {
+// Characters a shell reads as a redirect, pipe, separator, background, expansion or comment.
+const SHELL_META = /[<>|;&$`#]/
+
+// Every hint line must paste into a shell as printed: each command starts its line (a leading space keeps it out
+// of shell history), its only pipe is the leading `echo '{...}' |` with a real boolean value, and no other text
+// holds a shell metacharacter. `isErrorFirst` skips line 0 when it carries an engine error's own text.
+function expectPasteable(text: string | undefined, values: string[], isErrorFirst = false): void {
   expect(text).toBeDefined()
-  const lines = (text ?? '').split('\n').slice(1)
-  const commands = lines.map(line => line.trim()).filter(line => line.startsWith('echo '))
+  const lines = (text ?? '').split('\n').slice(isErrorFirst ? 1 : 0)
+  const commands = lines.filter(line => line.includes('claude plugin configure'))
   expect(commands.map(line => /^echo '\{"autoOpen":"(true|false)"\}' \| (.*)$/.exec(line)?.[1])).toEqual(values)
-  for (const line of commands) expect(/[<>|]/.test(line.replace(/^echo '[^']*' \| /, ''))).toBe(false)
-  for (const line of lines.filter(one => !one.trim().startsWith('echo '))) expect(/[<>|]/.test(line)).toBe(false)
+  for (const line of commands) expect(SHELL_META.test(line.replace(/^echo '[^']*' \| /, ''))).toBe(false)
+  for (const line of lines.filter(one => !commands.includes(one))) expect(SHELL_META.test(line)).toBe(false)
 }
 
 const START = { cwd: '/repo', surface: 'terminal', isInteractive: true } as const
@@ -159,5 +163,6 @@ test('/prs autoOpen reports a rejected write instead of failing', async ($, on) 
   expect(run.text).toContain('Auto-open is unchanged:')
   // The kit skips a throwing hook and rejects with its own text, so only the outcome is checked.
   expect(run.text).toContain(`echo '{"autoOpen":"true"}' | claude plugin configure pr-pane@evolv-marketplace --values-stdin`)
+  expectPasteable(run.text, ['true'], true)
   await drain($)
 })
