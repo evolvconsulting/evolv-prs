@@ -1,4 +1,4 @@
-import type { Checks, Detail, Pr, Review } from '../types'
+import type { Checks, Detail, Pr, Review, Rules } from '../types'
 
 export const FIELDS =
   'number,title,author,headRefName,createdAt,isDraft,reviewDecision,mergeable,mergeStateStatus,additions,deletions,changedFiles,latestReviews,url'
@@ -90,35 +90,59 @@ export function agentTrailers(messages: string[]): string[] {
   return [...found]
 }
 
+const CATCH_ALL = ['*', '/*', '**', '/**', '/']
+
+function codeownersPattern(pattern: string): RegExp {
+  const anchored = pattern.startsWith('/')
+  const body = pattern
+    .replace(/^\//, '')
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*\*/g, '\u0000')
+    .replace(/\*/g, '[^/]*')
+    .replace(/\?/g, '[^/]')
+    .replace(/\u0000/g, '.*')
+  const tail = pattern.endsWith('/') ? '.*' : '(/.*)?'
+
+  return new RegExp(`${anchored ? '^' : '(^|/)'}${body}${tail}$`)
+}
+
+function codeownersLines(text: string): { pattern: string; owners: string[] }[] {
+  return text
+    .split('\n')
+    .map(line => line.replace(/#.*/, '').trim().split(/\s+/))
+    .filter(([pattern]) => pattern !== undefined && pattern !== '')
+    .map(([pattern, ...owners]) => ({ pattern: pattern as string, owners }))
+}
+
 // A CODEOWNERS file as a path test: last-match semantics don't matter here, only "owned or not".
 export function codeownersMatcher(text: string): (path: string) => boolean {
-  const patterns = text
-    .split('\n')
-    .map(line => line.replace(/#.*/, '').trim().split(/\s+/)[0] ?? '')
+  const patterns = codeownersLines(text)
     // A catch-all default owner (`* @org`) would mark every path; it says nothing about sensitivity.
-    .filter(pattern => pattern !== '' && !['*', '/*', '**', '/**', '/'].includes(pattern))
-    .map(pattern => {
-      const anchored = pattern.startsWith('/')
-      const body = pattern
-        .replace(/^\//, '')
-        .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-        .replace(/\*\*/g, '\u0000')
-        .replace(/\*/g, '[^/]*')
-        .replace(/\?/g, '[^/]')
-        .replace(/\u0000/g, '.*')
-      const tail = pattern.endsWith('/') ? '.*' : '(/.*)?'
-
-      return new RegExp(`${anchored ? '^' : '(^|/)'}${body}${tail}$`)
-    })
+    .filter(line => !CATCH_ALL.includes(line.pattern))
+    .map(line => codeownersPattern(line.pattern))
 
   return path => patterns.some(re => re.test(path))
+}
+
+// A CODEOWNERS file as path -> owners, as GitHub reads it: the last matching line wins, a catch-all included.
+export function codeownersOwners(text: string): (path: string) => string[] {
+  const lines = codeownersLines(text).map(line => ({ re: codeownersPattern(line.pattern), owners: line.owners })).reverse()
+
+  return path => lines.find(line => line.re.test(path))?.owners ?? []
+}
+
+// Whether `viewer`, directly or through one of `teams` (`org/slug`), owns any of `paths`.
+export function ownsAny(paths: string[], ownersOf: (path: string) => string[], viewer: string, teams: string[]): boolean {
+  const mine = new Set([`@${viewer}`, ...teams.map(team => `@${team}`)].map(one => one.toLowerCase()))
+
+  return paths.some(path => ownersOf(path).some(owner => mine.has(owner.toLowerCase())))
 }
 
 export function sensitivePaths(paths: string[], owned?: (path: string) => boolean): string[] {
   return paths.filter(path => SENSITIVE.some(re => re.test(path)) || owned?.(path) === true)
 }
 
-type RawDetail = Omit<Detail, 'labels' | 'reviews' | 'checks' | 'failedRuns' | 'trailers' | 'sensitive' | 'filesChecked' | 'commitCount'> & {
+type RawDetail = Omit<Detail, 'labels' | 'reviews' | 'checks' | 'failedRuns' | 'trailers' | 'sensitive' | 'filesChecked' | 'commitCount' | 'viewerOwns'> & {
   labels: { name: string }[] | null
   reviews: RawReview[] | null
   statusCheckRollup: RawCheck[] | null
@@ -148,6 +172,7 @@ export function parseDetail(stdout: string, owned?: (path: string) => boolean, p
     trailers: agentTrailers(commits.map(one => one.messageBody)),
     sensitive: sensitivePaths(files, owned),
     filesChecked: files.length,
+    viewerOwns: null,
     body: raw.body ?? '',
   }
 }
@@ -170,8 +195,11 @@ export function diffKey(info: Detail): string {
 }
 
 // Reasons to pause before approving; empty means approve straight away.
-export function approvalWarnings(pr: Pr, info: Detail, hasViewedDiff: boolean): string[] {
+export function approvalWarnings(pr: Pr, info: Detail, hasViewedDiff: boolean, rules?: Rules): string[] {
   const warnings: string[] = []
+  if (rules?.isCodeOwnerReview === true && info.viewerOwns === false) {
+    warnings.push(`${rules.base} requires a code owner's review, and you don't own any changed path, so your approval won't count toward it.`)
+  }
   const agent = agentSignals(pr, info)
   if (agent.length > 0 && !hasViewedDiff) {
     warnings.push(`Agent-authored (${agent[0]}) and you haven't opened the diff this session.`)
@@ -193,13 +221,158 @@ export function approvalWarnings(pr: Pr, info: Detail, hasViewedDiff: boolean): 
   return warnings
 }
 
-// Approve's reasons, plus whether the PR has the approval merge would ship it without.
-export function mergeWarnings(pr: Pr, info: Detail, hasViewedDiff: boolean): string[] {
+// Approve's reasons, plus what merge would ship without: the base branch's unmet rules when they are known.
+export function mergeWarnings(pr: Pr, info: Detail, hasViewedDiff: boolean, rules?: Rules): string[] {
   const warnings = approvalWarnings(pr, info, hasViewedDiff)
+  if (rules?.state === 'rules') {
+    const unmet = unmetRules(pr, info, rules)
+    // Failing checks the rules require are already listed as unmet.
+    const isAllRequired = info.checks.failing.every(name => rules.requiredChecks.includes(name))
+    return [...unmet, ...warnings.filter(line => !(isAllRequired && line.endsWith(`checks failing: ${info.checks.failing.join(', ')}.`)))]
+  }
   if (pr.reviewDecision === 'CHANGES_REQUESTED') warnings.unshift('Changes were requested and not yet approved.')
   else if (pr.reviewDecision !== 'APPROVED') warnings.unshift('No approving review.')
 
   return warnings
+}
+
+export const RULES_TTL_MS = 10 * 60_000
+
+type Answer = { ok: boolean; out: string }
+
+type RawRule = {
+  type: string
+  parameters?: {
+    required_approving_review_count?: number
+    require_code_owner_review?: boolean
+    require_last_push_approval?: boolean
+    dismiss_stale_reviews_on_push?: boolean
+    required_status_checks?: { context: string }[]
+  } | null
+}
+
+type RawProtection = {
+  required_pull_request_reviews?: {
+    required_approving_review_count?: number
+    require_code_owner_reviews?: boolean
+    require_last_push_approval?: boolean
+    dismiss_stale_reviews?: boolean
+  } | null
+  required_status_checks?: { contexts?: string[]; checks?: { context: string }[] } | null
+}
+
+function httpStatus(out: string): number | null {
+  const found = /\(HTTP (\d{3})\)/.exec(out)
+
+  return found === null ? null : Number(found[1])
+}
+
+// Rulesets need only read access and stand for the branch's rules; classic protection needs admin, so its 403
+// or 404 says nothing on its own and it only adds to what rulesets said. Several pull_request rules can apply
+// (repository and organization rulesets): the highest count and any flag win.
+export function parseRules(base: string, rulesets: Answer, protection: Answer, checkedAt: number): Rules {
+  const rules: Rules = {
+    base, state: 'none', sources: [], approvals: 0, isCodeOwnerReview: false, isLastPushApproval: false,
+    isDismissStale: false, requiredChecks: [], checkedAt,
+  }
+  const checks = new Set<string>()
+  try {
+    if (rulesets.ok) {
+      rules.sources.push('rulesets')
+      for (const rule of JSON.parse(rulesets.out) as RawRule[]) {
+        const params = rule.parameters ?? {}
+        if (rule.type === 'pull_request') {
+          rules.approvals = Math.max(rules.approvals, params.required_approving_review_count ?? 0)
+          rules.isCodeOwnerReview ||= params.require_code_owner_review === true
+          rules.isLastPushApproval ||= params.require_last_push_approval === true
+          rules.isDismissStale ||= params.dismiss_stale_reviews_on_push === true
+        }
+        if (rule.type === 'required_status_checks') for (const check of params.required_status_checks ?? []) checks.add(check.context)
+      }
+    }
+    if (protection.ok) {
+      rules.sources.push('branch protection')
+      const raw = JSON.parse(protection.out) as RawProtection
+      const reviews = raw.required_pull_request_reviews
+      if (reviews) {
+        rules.approvals = Math.max(rules.approvals, reviews.required_approving_review_count ?? 0)
+        rules.isCodeOwnerReview ||= reviews.require_code_owner_reviews === true
+        rules.isLastPushApproval ||= reviews.require_last_push_approval === true
+        rules.isDismissStale ||= reviews.dismiss_stale_reviews === true
+      }
+      for (const context of raw.required_status_checks?.contexts ?? []) checks.add(context)
+      for (const check of raw.required_status_checks?.checks ?? []) checks.add(check.context)
+    }
+  } catch (err) {
+    return { ...rules, state: 'error', error: `unreadable response: ${String(err)}` }
+  }
+  rules.requiredChecks = [...checks]
+  if (rules.sources.length === 0) {
+    const status = httpStatus(rulesets.out)
+    if (status === 403) return { ...rules, state: 'unreadable' }
+    if (status === 404) return rules
+
+    return { ...rules, state: 'error', error: rulesets.out }
+  }
+  const isRequired = rules.approvals > 0 || rules.isCodeOwnerReview || rules.isLastPushApproval || checks.size > 0
+
+  return { ...rules, state: isRequired ? 'rules' : 'none' }
+}
+
+// Approvals as GitHub counts them: each reviewer's latest deciding review (a comment decides nothing), and when
+// stale reviews are dismissed on push, only those on the head commit.
+export function approvalCount(info: Detail, rules: Rules): number {
+  const latest = new Map<string, Review>()
+  for (const rv of info.reviews) {
+    if (rv.state !== 'COMMENTED' && rv.state !== 'PENDING' && !latest.has(rv.author)) latest.set(rv.author, rv)
+  }
+
+  return [...latest.values()]
+    .filter(rv => rv.state === 'APPROVED' && (!rules.isDismissStale || rv.commit === '' || rv.commit === info.headRefOid))
+    .length
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`
+}
+
+export function rulesLine(rules: Rules | undefined, info: Detail): string {
+  if (rules === undefined) return 'rules: checking...'
+  if (rules.state === 'unreadable') return 'rules: not readable here (private repo on a free plan; GitHub enforces none)'
+  if (rules.state === 'none') return `rules: none on ${rules.base}`
+  if (rules.state === 'error') return `rules: couldn't read them (${rules.error ?? 'unknown error'})`
+  const parts: string[] = []
+  if (rules.approvals > 0) parts.push(`needs ${plural(rules.approvals, 'approval')} (has ${approvalCount(info, rules)})`)
+  if (rules.isCodeOwnerReview) parts.push('CODEOWNERS review required')
+  if (rules.isLastPushApproval) parts.push("the last pusher can't approve")
+  if (rules.requiredChecks.length > 0) {
+    const failing = rules.requiredChecks.filter(name => info.checks.failing.includes(name))
+    parts.push(`required: ${rules.requiredChecks.join(', ')}${failing.length > 0 ? ` (${failing.join(', ')} failing)` : ''}`)
+  }
+
+  return `rules on ${rules.base}: ${parts.join(' · ')} [${rules.sources.join(' + ')}]`
+}
+
+// What still stops the merge under the base branch's rules, worst first.
+export function unmetRules(pr: Pr, info: Detail, rules: Rules): string[] {
+  const unmet: string[] = []
+  if (pr.reviewDecision === 'CHANGES_REQUESTED') unmet.push('Changes were requested and not yet approved.')
+  const has = approvalCount(info, rules)
+  if (has < rules.approvals) {
+    unmet.push(`${rules.base} needs ${plural(rules.approvals, 'approval')}; it has ${has}${rules.isDismissStale ? ' on the head commit' : ''}.`)
+  } else if (rules.isCodeOwnerReview && pr.reviewDecision === 'REVIEW_REQUIRED') {
+    unmet.push(`${rules.base} needs a code owner's approval, and GitHub still reports review required.`)
+  }
+  const failing = rules.requiredChecks.filter(name => info.checks.failing.includes(name))
+  if (failing.length > 0) unmet.push(`Required checks failing: ${failing.join(', ')}.`)
+
+  return unmet
+}
+
+// Heuristic for require_last_push_approval: GitHub doesn't expose who pushed, so the head commit's author and
+// committer stand in for the pusher.
+export function isLastPusher(viewer: string, headLogins: string[]): boolean {
+  return headLogins.some(login => login.toLowerCase() === viewer.toLowerCase())
 }
 
 export const FEEDBACK_LABELS = ['issue', 'suggestion', 'question', 'nitpick', 'thought', 'praise'] as const

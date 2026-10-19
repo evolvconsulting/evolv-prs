@@ -15,7 +15,7 @@ const PR: Pr = {
 const INFO: Detail = {
   number: 7, headRefOid: 'abc', headRefName: 'feat/x', baseRefName: 'dev', additions: 10, deletions: 2,
   changedFiles: 1, commitCount: 1, labels: [], reviews: [], checks: { passed: 1, failed: 0, pending: 0, failing: [] },
-  failedRuns: [], trailers: [], sensitive: [], filesChecked: 1, body: '',
+  failedRuns: [], trailers: [], sensitive: [], filesChecked: 1, viewerOwns: null, body: '',
 }
 
 test('flags bot authors, agent branches and agent trailers', async () => {
