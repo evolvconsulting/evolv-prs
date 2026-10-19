@@ -296,3 +296,14 @@ export function newPrs(prs: Pr[], seen: number[], seededAt: number): Pr[] {
 
   return prs.filter(pr => !known.has(pr.number) && Date.parse(pr.createdAt) > seededAt - SEED_SLACK_MS)
 }
+
+// The collapsed pane's one line: "5 open · 2 approved · 1 checks failing · 1 conflicts", zero counts left out.
+export function summary(prs: Pr[]): string {
+  const counts: [number, string][] = [
+    [prs.filter(pr => pr.reviewDecision === 'APPROVED').length, 'approved'],
+    [prs.filter(pr => pr.mergeStateStatus === 'UNSTABLE').length, 'checks failing'],
+    [prs.filter(pr => pr.mergeable === 'CONFLICTING' || pr.mergeStateStatus === 'DIRTY').length, 'conflicts'],
+  ]
+
+  return [`${prs.length} open`, ...counts.filter(([n]) => n > 0).map(([n, label]) => `${n} ${label}`)].join(' · ')
+}

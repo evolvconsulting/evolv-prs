@@ -97,6 +97,8 @@ declare module 'claude-code' {
       detail: Detail | { number: number; error: string } | null
       action: Action | null
       view: View
+      // Folded to one summary line; mirrored to $.store so it outlasts the session.
+      collapsed: boolean
       who: Who | null
       diffViewed: string[]
       audit: AuditEntry[]

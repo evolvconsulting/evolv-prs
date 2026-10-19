@@ -5,7 +5,7 @@ import type { Action, AuditEntry, Detail, Pr, Snapshot } from '../types'
 import { COMMANDS, HELP, KEYS, helpText } from './keys'
 import {
   DETAIL_FIELDS, FEEDBACK_LABELS, FIELDS, age, agentSignals, approvalWarnings, canMerge, codeownersMatcher,
-  created, diffKey, feedbackBody, isBehind, isLarge, merge, mergeWarnings, newPrs, parseDetail, parsePrs, review, reviewState, when,
+  created, diffKey, feedbackBody, isBehind, isLarge, merge, mergeWarnings, newPrs, parseDetail, parsePrs, review, reviewState, summary, when,
 } from './prs'
 
 const PANE = 'pr-pane'
@@ -24,6 +24,7 @@ const selected = atom({ plugin: 'pr-pane', key: 'selected' } as const, null)
 const detail = atom({ plugin: 'pr-pane', key: 'detail' } as const, null)
 const action = atom({ plugin: 'pr-pane', key: 'action' } as const, null)
 const view = atom({ plugin: 'pr-pane', key: 'view' } as const, 'list')
+const collapsed = atom({ plugin: 'pr-pane', key: 'collapsed' } as const, false)
 const who = atom({ plugin: 'pr-pane', key: 'who' } as const, null)
 const diffViewed = atom({ plugin: 'pr-pane', key: 'diffViewed' } as const, [])
 const audit = atom({ plugin: 'pr-pane', key: 'audit' } as const, [])
@@ -159,6 +160,18 @@ async function select($: EngineInterface, n: number | null): Promise<void> {
     return
   }
   await loadDetail($, n)
+}
+
+// Folding leaves the selection and its detail alone, so expanding shows the same PR.
+async function setCollapsed($: EngineInterface, value: boolean): Promise<void> {
+  await update($, collapsed, () => value)
+  await update($, view, () => 'list' as const)
+  await $.store.set('collapsed', value)
+}
+
+// Showing means placed and in front; an unplaced or backgrounded pane is opened instead.
+async function isShowing($: EngineInterface): Promise<boolean> {
+  return (await $.ui.panes()).some(pane => pane.id === PANE && pane.isPlaced && pane.isShown)
 }
 
 async function setAction($: EngineInterface, value: Action | null): Promise<void> {
@@ -304,17 +317,21 @@ function auditLine(one: AuditEntry): string {
   return `${one.at.slice(0, 16).replace('T', ' ')} ${one.actor} ${one.repo}#${one.pr}${sha} ${one.action} ${one.result}${note}`
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  const isAutoOpen = options.autoOpen !== false
+
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'prs',
-      description: 'Open PRs pane for this repo (/prs help lists the hotkeys)',
-      argumentHint: '[help|log|refresh]',
+      description: 'Toggle the open PRs pane for this repo (/prs help lists the hotkeys)',
+      argumentHint: '[show|hide|help|log|refresh]',
     })
+    const folded = await $.store.get('collapsed')
+    if (typeof folded === 'boolean') await update($, collapsed, () => folded)
     ready = loadContext($)
     void ready.then(() => refresh($))
     $.clock.every(POLL_MS, () => void refresh($))
-    void $.ui.open({ id: PANE, title: 'Pull requests' })
+    if (isAutoOpen) void $.ui.open({ id: PANE, title: 'Pull requests' })
 
     return next(e)
   })
@@ -325,6 +342,10 @@ export const register: Register = on => {
     if (arg === 'log') {
       const list = (await read($, audit)).slice(-20)
       return { text: list.length === 0 ? 'No pr-pane actions logged yet.' : list.map(auditLine).join('\n') }
+    }
+    if (arg === 'hide' || (arg === '' && (await isShowing($)))) {
+      await $.ui.close({ id: PANE })
+      return { text: 'Pull requests pane closed. Run /prs to open it again.' }
     }
     void refresh($)
     if (arg === 'refresh') return { text: 'Refreshing open PRs.' }
@@ -359,6 +380,19 @@ export const register: Register = on => {
     const width = Math.max(20, e.props.bodyColumns)
     const rule = <Text dimColor>{'─'.repeat(width)}</Text>
 
+    if (await read($, collapsed)) {
+      return (
+        <Box width={width}>
+          {snap !== null && snap.error !== null ? (
+            <Text color="error" wrap="truncate-end">{snap.error} </Text>
+          ) : (
+            <Text dimColor>{snap === null ? 'checking' : summary(snap.prs)} </Text>
+          )}
+          <Button key="expand" plain hotkey={KEYS.collapse} label="expand" onPress={() => setCollapsed($, false)} />
+        </Box>
+      )
+    }
+
     const header = (
       <Box>
         <Text dimColor>
@@ -369,6 +403,8 @@ export const register: Register = on => {
         <Button key="log" plain hotkey={KEYS.log} label="log" onPress={() => update($, view, v => (v === 'log' ? 'list' : 'log'))} />
         <Text> </Text>
         <Button key="help" plain hotkey={KEYS.help} label="help" onPress={() => update($, view, v => (v === 'help' ? 'list' : 'help'))} />
+        <Text> </Text>
+        <Button key="collapse" plain hotkey={KEYS.collapse} label="collapse" onPress={() => setCollapsed($, true)} />
       </Box>
     )
 
