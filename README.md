@@ -8,6 +8,10 @@ A Claude Code mod that shows the current repo's open pull requests in a pane, us
 - **Branch rules:** the detail view shows the base branch's rules and how the PR stands against them, for example `rules on dev: needs 2 approvals (has 1) · CODEOWNERS review required · the last pusher can't approve · required: ci, lint (lint failing) [rulesets]`.
   - The rules come from the branch's rulesets. Classic branch protection is added when it can be read, which needs admin access. They're cached for 10 minutes per branch.
   - A private repo on GitHub's free plan reads `not readable here`, because GitHub enforces no rules there.
+- **Merge gates and branch:** under the rules, the detail view draws the steps to merge as a chain, `approvals 1/2 ─▶ CODEOWNERS ─▶ checks 4/5 ─▶ up to date ─▶ mergeable`.
+  - Met steps are green, the first blocker is red, and later ones are dim. In a narrow pane the chain turns into one step per line.
+  - Below it, a line shows how far the branch has moved from its base, for example `dev ◀── 3 behind · 5 ahead ── feat/x`.
+- **Mermaid:** `/prs diagram <n>` prints both views as Mermaid and copies them. `/prs diagram <n> --post` posts them as a PR comment, where GitHub draws them. Posting is logged.
 - **Actions:** code review, approve, comment, request changes, merge, update branch, re-run failed checks, open and close.
 - **Guardrails:**
   - Merge and close need a confirming press. Merge lists the base branch's unmet rules (approvals, code owner review, required checks), or `No approving review` when there are no rules to read. It is pinned to the commit you confirmed.
@@ -43,6 +47,8 @@ To work on it, see `CLAUDE.md`. The plugin itself lives in `plugin/`.
 | `/prs autoOpen` | Say whether the pane opens at session start |
 | `/prs autoOpen enable` | Open the pane at every session start |
 | `/prs autoOpen disable` | Open the pane only on `/prs` (the default) |
+| `/prs diagram <n>` | Print PR n's merge gates and branch as Mermaid, and copy it |
+| `/prs diagram <n> --post` | Post that Mermaid as a comment on PR n; logged |
 | `/prs help` | Print every command and hotkey |
 | `/prs log` | Print the last 20 logged actions |
 | `/prs refresh` | Refresh now |

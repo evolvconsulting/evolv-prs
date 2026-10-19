@@ -1,7 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { ConfigRow, EngineInterface, Register } from 'claude-code'
 
-import type { Action, AuditEntry, Detail, Pr, Rules, Snapshot } from '../types'
+import type { Action, AuditEntry, Detail, Divergence, Pr, Rules, Snapshot } from '../types'
+import { ARROW, DOWN, branchLine, gateRows, gates, mermaid, tones } from './diagram'
 import { COMMANDS, HELP, KEYS, USAGE_WIDTH, helpText } from './keys'
 import {
   DETAIL_FIELDS, FEEDBACK_LABELS, FIELDS, RULES_TTL_MS, age, agentSignals, approvalWarnings, canMerge, codeownersMatcher,
@@ -33,6 +34,7 @@ const diffViewed = atom({ plugin: 'pr-pane', key: 'diffViewed' } as const, [])
 const audit = atom({ plugin: 'pr-pane', key: 'audit' } as const, [])
 const reruns = atom({ plugin: 'pr-pane', key: 'reruns' } as const, {})
 const rules = atom({ plugin: 'pr-pane', key: 'rules' } as const, {})
+const branches = atom({ plugin: 'pr-pane', key: 'branches' } as const, {})
 
 // CODEOWNERS from the default branch, loaded once per module load.
 let owned: ((path: string) => boolean) | undefined
@@ -128,24 +130,82 @@ async function refreshOnce($: EngineInterface): Promise<void> {
   }
 }
 
-async function loadDetail($: EngineInterface, n: number): Promise<Detail | null> {
+// One PR's detail, read without touching the selection.
+async function fetchDetail($: EngineInterface, n: number): Promise<Detail | { number: number; error: string }> {
   const [ran, listed] = await Promise.all([
     gh($, ['pr', 'view', String(n), '--json', DETAIL_FIELDS]),
     gh($, ['api', '--paginate', `repos/{owner}/{repo}/pulls/${n}/files?per_page=100`, '--jq', '.[].filename']),
   ])
-  // A slower response for a PR no longer selected must not overwrite the current one.
-  if ((await read($, selected)) !== n) return null
   const paths = listed.ok ? listed.out.split('\n').filter(line => line !== '') : undefined
   const ctx = await read($, who)
   const value = ran.ok ? parseDetail(ran.out, owned, paths) : { number: n, error: ran.out }
   if (!('error' in value) && ownersOf !== undefined && paths !== undefined && ctx !== null && ctx.viewer !== 'unknown') {
     value.viewerOwns = ownsAny(paths, ownersOf, ctx.viewer, teams)
   }
-  await update($, detail, () => value)
-  if ('error' in value) return null
-  await loadRules($, value.baseRefName)
 
   return value
+}
+
+async function loadDetail($: EngineInterface, n: number): Promise<Detail | null> {
+  const value = await fetchDetail($, n)
+  // A slower response for a PR no longer selected must not overwrite the current one.
+  if ((await read($, selected)) !== n) return null
+  await update($, detail, () => value)
+  if ('error' in value) return null
+  await Promise.all([loadRules($, value.baseRefName), loadDivergence($, value)])
+
+  return value
+}
+
+function divergenceKey(repo: string, info: Detail): string {
+  return `${repo}#${info.baseRefName}...${info.headRefOid}`
+}
+
+// Ahead and behind for the head commit; the TTL lets a base that moved since be noticed.
+async function loadDivergence($: EngineInterface, info: Detail): Promise<Divergence> {
+  const key = divergenceKey((await read($, who))?.repo ?? '?', info)
+  const now = await $.clock.now()
+  const cached = (await read($, branches))[key]
+  if (cached !== undefined && now - cached.checkedAt < RULES_TTL_MS) return cached
+  const ran = await gh($, ['api', `repos/{owner}/{repo}/compare/${encodeURIComponent(info.baseRefName)}...${info.headRefOid}`,
+    '--jq', '[.ahead_by, .behind_by] | map(tostring) | join(" ")'])
+  const [ahead, behind] = ran.ok ? ran.out.trim().split(' ').map(Number) : []
+  const base = { base: info.baseRefName, head: info.headRefName, sha: info.headRefOid, checkedAt: now }
+  const value: Divergence = ran.ok && Number.isFinite(ahead) && Number.isFinite(behind)
+    ? { ...base, ahead: ahead as number, behind: behind as number }
+    : { ...base, ahead: 0, behind: 0, error: ran.ok ? `unexpected answer: ${ran.out.trim()}` : ran.out }
+  await update($, branches, map => ({ ...map, [key]: value }))
+
+  return value
+}
+
+// /prs diagram: the PR's gates and branch as Mermaid, copied; with --post, also a PR comment, logged.
+async function diagram($: EngineInterface, n: number, isPost: boolean): Promise<string> {
+  // The list may not have loaded yet (a headless run) or may stop short of n (LIST_LIMIT), so read the PR itself then.
+  let pr = (await read($, snapshot))?.prs.find(one => one.number === n)
+  if (pr === undefined) {
+    const one = await gh($, ['pr', 'view', String(n), '--json', `${FIELDS},state`])
+    const state = one.ok ? (JSON.parse(one.out) as { state?: string }).state : undefined
+    if (!one.ok || state !== 'OPEN') return `#${n} isn't an open PR in this repo${one.ok ? ` (it is ${state?.toLowerCase()})` : `: ${one.out}`}.`
+    pr = parsePrs(`[${one.out}]`)[0]
+    if (pr === undefined) return `Couldn't read #${n}.`
+  }
+  const info = await fetchDetail($, n)
+  if ('error' in info) return `Couldn't load #${n}: ${info.error}`
+  const [branchRules, divergence] = await Promise.all([loadRules($, info.baseRefName), loadDivergence($, info)])
+  const text = mermaid(pr, info, gates(pr, info, branchRules), divergence)
+  let copied: string
+  try {
+    const result = await $.ui.copy({ text })
+    copied = result.isCopied ? 'Copied to the clipboard.' : `Not copied: ${result.reason}.`
+  } catch (err) {
+    copied = `Not copied: ${String(err)}.`
+  }
+  if (!isPost) return `${text}\n\n${copied} Run /prs diagram ${n} --post to post it as a comment on #${n}.`
+  const posted = await gh($, ['pr', 'comment', String(n), '--body', text], 120_000)
+  await record($, n, 'post diagram', posted.ok, posted.ok ? undefined : posted.out, info.headRefOid)
+
+  return posted.ok ? `${text}\n\n${copied} Posted as a comment on #${n}.` : `${copied} Couldn't post it on #${n}: ${posted.out}`
 }
 
 function rulesKey(repo: string, base: string): string {
@@ -265,7 +325,8 @@ async function setAction($: EngineInterface, value: Action | null): Promise<void
   await update($, action, () => value)
 }
 
-async function record($: EngineInterface, n: number, what: string, ok: boolean, note?: string): Promise<void> {
+// `sha` names the commit when the action wasn't on the selected PR's loaded detail.
+async function record($: EngineInterface, n: number, what: string, ok: boolean, note?: string, sha?: string): Promise<void> {
   const ctx = await read($, who)
   const info = await read($, detail)
   const entry: AuditEntry = {
@@ -273,7 +334,7 @@ async function record($: EngineInterface, n: number, what: string, ok: boolean, 
     actor: ctx?.viewer ?? 'unknown',
     repo: ctx?.repo ?? 'unknown',
     pr: n,
-    sha: info !== null && !('error' in info) && info.number === n ? info.headRefOid.slice(0, 12) : '',
+    sha: sha !== undefined ? sha.slice(0, 12) : info !== null && !('error' in info) && info.number === n ? info.headRefOid.slice(0, 12) : '',
     action: what,
     result: ok ? 'ok' : 'error',
     ...(note === undefined ? {} : { note: note.slice(0, 200) }),
@@ -424,7 +485,7 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: 'prs',
       description: 'Toggle the open PRs pane for this repo (/prs help lists the hotkeys)',
-      argumentHint: '[show|hide|help|log|refresh|autoOpen [enable|disable]]',
+      argumentHint: '[show|hide|help|log|refresh|autoOpen [enable|disable]|diagram <n> [--post]]',
     })
     const folded = await $.store.get('collapsed')
     if (typeof folded === 'boolean') await update($, collapsed, () => folded)
@@ -440,6 +501,12 @@ export const register: Register = (on, options) => {
     const arg = e.args.trim()
     if (arg === 'help') return { text: helpText() }
     const [verb, value, ...rest] = arg.split(/\s+/)
+    if (verb?.toLowerCase() === 'diagram') {
+      const n = Number(value?.replace(/^#/, ''))
+      const isPost = rest.length === 1 && rest[0] === '--post'
+      if (!Number.isInteger(n) || n <= 0 || (rest.length > 0 && !isPost)) return { text: 'Usage: /prs diagram <n> [--post]' }
+      return { text: await diagram($, n, isPost) }
+    }
     if (verb?.toLowerCase() === 'autoopen') {
       return { text: rest.length > 0 ? 'Usage: /prs autoOpen [enable|disable]' : await autoOpen($, value?.toLowerCase(), isAutoOpen) }
     }
@@ -483,6 +550,7 @@ export const register: Register = (on, options) => {
     const viewed = await read($, diffViewed)
     const repo = (await read($, who))?.repo ?? '?'
     const ruleMap = await read($, rules)
+    const branchMap = await read($, branches)
     const width = Math.max(20, e.props.bodyColumns)
     const rule = <Text dimColor>{'─'.repeat(width)}</Text>
 
@@ -669,6 +737,29 @@ export const register: Register = (on, options) => {
                     <Text key="rules" color={color} dimColor={color === undefined} wrap="wrap">{rulesLine(branchRules, info)}</Text>
                   )
                 })()}
+                {(() => {
+                  const list = gates(pr, info, ruleMap[rulesKey(repo, info.baseRefName)])
+                  const shade = tones(list)
+                  const toneOf = (gate: (typeof list)[number]) => shade[list.indexOf(gate)]
+                  return (
+                    <Box key="gates" flexDirection="column">
+                      {gateRows(list, width).map((row, at) => (
+                        <Text key={`gate-row-${at}`} wrap="truncate-end">
+                          {at > 0 && <Text dimColor>{DOWN}</Text>}
+                          {row.map((gate, i) => (
+                            <Text key={`gate-${gate.name}`}>
+                              {i > 0 && <Text dimColor>{ARROW}</Text>}
+                              <Text color={toneOf(gate) === 'met' ? 'success' : toneOf(gate) === 'blocker' ? 'error' : undefined} dimColor={toneOf(gate) === 'pending'}>
+                                {gate.label}
+                              </Text>
+                            </Text>
+                          ))}
+                        </Text>
+                      ))}
+                    </Box>
+                  )
+                })()}
+                <Text key="branch" dimColor wrap="truncate-end">{branchLine(branchMap[divergenceKey(repo, info)])}</Text>
                 {info.reviews.length === 0 ? (
                   <Text dimColor>reviews: none yet</Text>
                 ) : (

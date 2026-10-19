@@ -66,6 +66,17 @@ export type Rules = {
   checkedAt: number
 }
 
+// How far a PR's head has moved from its base, from the compare API.
+export type Divergence = {
+  base: string
+  head: string
+  sha: string
+  ahead: number
+  behind: number
+  error?: string
+  checkedAt: number
+}
+
 export type ActionKind =
   | 'confirm-merge'
   | 'confirm-close'
@@ -123,6 +134,8 @@ declare module 'claude-code' {
       reruns: Record<string, number>
       // Per `<repo>#<base>`, refetched after RULES_TTL_MS.
       rules: Record<string, Rules>
+      // Per `<repo>#<base>...<head sha>`, refetched after RULES_TTL_MS as the base can move.
+      branches: Record<string, Divergence>
     }
   }
 }

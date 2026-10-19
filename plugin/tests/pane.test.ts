@@ -38,7 +38,10 @@ type Stubs = {
 // Stands in for the engine beneath the plugin: nothing is stored, the pane calls and gh argv are recorded, the
 // clock reads `calls.now`, and the /config row holds what config.set wrote.
 function engine(on: On, { isShowing = false, deny, isHeadless = false, reject, gh }: Stubs = {}) {
-  const calls = { opened: 0, closed: 0, stored: [] as unknown[], autoOpen: false, gh: [] as string[][], now: Date.parse('2026-10-19T12:00:00Z') }
+  const calls = {
+    opened: 0, closed: 0, stored: [] as unknown[], autoOpen: false, gh: [] as string[][], copied: [] as string[],
+    now: Date.parse('2026-10-19T12:00:00Z'),
+  }
   on('session.start', async ($, e) => ({ cwd: e.cwd }))
   on('command.register', async ($, e) => ({ value: { command: e.name } }))
   on('process.run', async ($, e) => {
@@ -59,6 +62,10 @@ function engine(on: On, { isShowing = false, deny, isHeadless = false, reject, g
     return { value: undefined }
   })
   on('ui.toast', async () => ({ value: undefined }))
+  on('ui.copy', async ($, e) => {
+    calls.copied.push(e.text)
+    return { value: { isCopied: true } }
+  })
   on('ui.panes', async () => ({
     value: isShowing ? [{ id: 'pr-pane', title: 'Pull requests', isShown: true, isFocused: false, isPlaced: true }] : [],
   }))
@@ -208,10 +215,12 @@ function repo(rules: unknown, codeowners?: string, teams: string[] = []): Gh {
     if (verb === 'api' && sub === 'user') return { ok: true, out: 'rev\n' }
     if (verb === 'repo') return { ok: true, out: 'o/r\n' }
     if (verb === 'pr' && sub === 'list') return { ok: true, out: JSON.stringify([PR]) }
-    if (verb === 'pr' && sub === 'view') return { ok: true, out: JSON.stringify(DETAIL) }
+    if (verb === 'pr' && sub === 'view' && argv[2] === '7') return { ok: true, out: JSON.stringify({ ...PR, ...DETAIL, state: 'OPEN' }) }
     if (path.endsWith('/files?per_page=100')) return { ok: true, out: 'src/a.ts\n' }
     if (path.endsWith('/rules/branches/dev')) return { ok: true, out: JSON.stringify(rules) }
     if (path.endsWith('/commits/abc1234def')) return { ok: true, out: 'rev rev\n' }
+    if (path.endsWith('/compare/dev...abc1234def')) return { ok: true, out: '5 3\n' }
+    if (verb === 'pr' && sub === 'comment') return { ok: true, out: 'https://github.com/o/r/pull/7#issuecomment-1\n' }
     if (path.endsWith('/contents/.github/CODEOWNERS') && codeowners !== undefined) return { ok: true, out: codeowners }
     if (sub === '--paginate' && argv.includes('user/teams')) return { ok: true, out: teams.map(team => `${team}\n`).join('') }
     return { ok: false, err: 'gh: Not Found (HTTP 404)' }
@@ -260,3 +269,55 @@ for (const [teams, isWarned] of [[['org/web'], true], [['org/core'], false]] as 
     await drain($)
   })
 }
+
+test('the detail view draws the gates on one row, or one per row when narrow, and the branch line', async ($, on) => {
+  engine(on, { gh: repo([{ type: 'pull_request', parameters: { required_approving_review_count: 2 } }]) })
+  await $.session.start(START)
+  await drain($)
+  for (const [columns, rows] of [[80, 1], [40, 4]] as const) {
+    const ui = await $.ui.mount({ plugin: 'pr-pane', surface: 'terminal', component: 'Pane', props: { ...PROPS, bodyColumns: columns }, requestId: 'pr-pane' })
+    await ui.press({ key: 'row-7' })
+    const chain = await ui.find({ text: 'approvals 0/2 ─▶ no checks ─▶ up to date ─▶ mergeable' })
+    const stacked = await Promise.all(['└▶ no checks', '└▶ up to date', '└▶ mergeable'].map(text => ui.find({ text })))
+    expect(chain !== undefined).toBe(rows === 1)
+    expect(stacked.filter(one => one !== undefined)).toHaveLength(rows === 1 ? 0 : 3)
+    expect(await ui.find({ text: 'dev ◀── 3 behind · 5 ahead ── feat/x' })).toBeDefined()
+    await ui.press({ key: 'row-7' })
+    await ui.unmount()
+  }
+  await drain($)
+})
+
+test('/prs diagram prints and copies the Mermaid; only --post comments on the PR, and logs it', async ($, on) => {
+  const calls = engine(on, { gh: repo([]) })
+  await $.session.start(START)
+  await drain($)
+  const run = async (args: string) => (await $.command.run({ ...TYPED, command: 'prs', args })).text ?? ''
+  const printed = await run('diagram 7')
+  expect(printed).toContain('```mermaid\nflowchart LR')
+  expect(printed).toContain('Copied to the clipboard. Run /prs diagram 7 --post to post it as a comment on #7.')
+  expect(calls.copied).toHaveLength(1)
+  const comments = () => calls.gh.filter(argv => argv[0] === 'pr' && argv[1] === 'comment')
+  expect(comments()).toHaveLength(0)
+  expect(await run('diagram 7 --now')).toBe('Usage: /prs diagram <n> [--post]')
+  expect(await run('diagram 8')).toBe("#8 isn't an open PR in this repo: gh: Not Found (HTTP 404).")
+  expect(comments()).toHaveLength(0)
+
+  expect(await run('diagram #7 --post')).toContain('Posted as a comment on #7.')
+  expect(comments()).toHaveLength(1)
+  expect(comments()[0]?.slice(0, 4)).toEqual(['pr', 'comment', '7', '--body'])
+  expect(comments()[0]?.[4]).toContain('```mermaid')
+  expect(await run('log')).toContain('rev o/r#7 @abc1234 post diagram ok')
+  await drain($)
+})
+
+test('/prs diagram reads a PR the list does not hold', async ($, on) => {
+  const listed = repo([])
+  engine(on, { gh: argv => (argv[0] === 'pr' && argv[1] === 'list' ? { ok: true, out: '[]' } : listed(argv)) })
+  await $.session.start(START)
+  await drain($)
+  const text = (await $.command.run({ ...TYPED, command: 'prs', args: 'diagram 7' })).text ?? ''
+  expect(text).toContain('Merge readiness of #7 at abc1234:')
+  expect(text).toContain('head["feat/x"] -- "5 ahead · 3 behind" --> base["dev"]')
+  await drain($)
+})
