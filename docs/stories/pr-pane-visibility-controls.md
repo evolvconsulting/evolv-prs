@@ -12,7 +12,7 @@ tasks:
 generated:
   by: lore/0.13.0
   at: 2026-10-19T17:50:47.166Z
-lore_task_status: in-progress
+lore_task_status: done
 ---
 
 # pr-pane visibility controls
@@ -38,7 +38,7 @@ colleague asked for a way to toggle its visibility or expand and collapse it.
 |---|---|---|
 | [PRS-1](../../.quest/completed/PRS-1.json) | pr-pane 0.3.0: /prs toggle, z collapse, autoOpen option | Done |
 | [PRS-2](../../.quest/completed/PRS-2.json) | pr-pane 0.3.1: autoOpen off by default, /prs autoOpen enable\|disable | Done |
-| [PRS-3](../../.quest/tasks/PRS-3.json) | pr-pane 0.3.2: /prs autoOpen survives a missing /config row | In Progress |
+| [PRS-3](../../.quest/completed/PRS-3.json) | pr-pane 0.3.2: /prs autoOpen survives a missing /config row | Done |
 <!-- lore:tasks:end -->
 
 ## Notes
@@ -49,4 +49,7 @@ colleague asked for a way to toggle its visibility or expand and collapse it.
   `$.store` override. The command and `/config` cannot disagree, so there is no precedence rule.
   `ConfigRow` does not say whether a value is the default, so the status line says "off by default"
   rather than naming the source.
-- Released as `v0.3.0` (#2) and `v0.3.1` (#3). evolv-marketplace installs the plugin from those tags.
+- A headless (`claude -p`) session has no `/config` row, and `$.config.set` rejects the key. From 0.3.2, `/prs autoOpen`
+  reports `options.autoOpen` there and points to `claude plugin configure pr-pane` (PRS-3).
+- Released as `v0.3.0` (#2), `v0.3.1` (#3) and `v0.3.2` (#5). The evolv marketplace skipped 0.3.1 because of the
+  headless bug and moves from `v0.3.0` to `v0.3.2`.
