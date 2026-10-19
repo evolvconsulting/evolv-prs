@@ -277,8 +277,8 @@ test('the detail view draws the gates on one row, or one per row when narrow, an
   for (const [columns, rows] of [[80, 1], [40, 4]] as const) {
     const ui = await $.ui.mount({ plugin: 'pr-pane', surface: 'terminal', component: 'Pane', props: { ...PROPS, bodyColumns: columns }, requestId: 'pr-pane' })
     await ui.press({ key: 'row-7' })
-    const chain = await ui.find({ text: 'approvals 0/2 ─▶ no checks ─▶ up to date ─▶ mergeable' })
-    const stacked = await Promise.all(['└▶ no checks', '└▶ up to date', '└▶ mergeable'].map(text => ui.find({ text })))
+    const chain = await ui.find({ text: 'approvals 0/2 ─▶ no checks ─▶ 3 behind (not required) ─▶ mergeable' })
+    const stacked = await Promise.all(['└▶ no checks', '└▶ 3 behind (not required)', '└▶ mergeable'].map(text => ui.find({ text })))
     expect(chain !== undefined).toBe(rows === 1)
     expect(stacked.filter(one => one !== undefined)).toHaveLength(rows === 1 ? 0 : 3)
     expect(await ui.find({ text: 'dev ◀── 3 behind · 5 ahead ── feat/x' })).toBeDefined()
@@ -357,5 +357,18 @@ test('a headless run gets no layout tip', async ($, on) => {
   engine(on)
   await $.session.start({ ...START, surface: null, isInteractive: false })
   expect((await $.command.run({ ...TYPED, command: 'prs', args: 'show' })).text).not.toContain('Tip:')
+  await drain($)
+})
+
+test('/prs answers an unknown argument without opening or closing the pane', async ($, on) => {
+  const calls = engine(on, { isShowing: true })
+  await $.session.start({ ...START, isInteractive: false })
+  const run = async (args: string) => (await $.command.run({ ...TYPED, command: 'prs', args })).text
+  expect(await run('layout close')).toBe('/prs doesn\'t know "layout close". Run /prs help for the commands.')
+  expect(await run('opne')).toBe('/prs doesn\'t know "opne". Run /prs help for the commands.')
+  expect([calls.opened, calls.closed]).toEqual([0, 0])
+  expect(await run('refresh')).toBe('Refreshing open PRs.')
+  expect(await run('show')).toContain('Pull requests pane opened.')
+  expect(await run('')).toContain('Pull requests pane closed.')
   await drain($)
 })

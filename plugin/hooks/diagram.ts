@@ -1,17 +1,23 @@
 import type { Detail, Divergence, Pr, Rules } from '../types'
 import { approvalCount } from './prs'
 
-// One step a PR passes on its way to merge, in the order GitHub's merge box reads them.
-export type Gate = { name: 'approvals' | 'codeowners' | 'checks' | 'up-to-date' | 'mergeable'; label: string; isMet: boolean }
+// One step a PR passes on its way to merge, in the order GitHub's merge box reads them. `isWarning` marks a met
+// gate worth a look all the same.
+export type Gate = {
+  name: 'approvals' | 'codeowners' | 'checks' | 'up-to-date' | 'mergeable'
+  label: string
+  isMet: boolean
+  isWarning?: boolean
+}
 
-// met: green · blocker: the first unmet gate, red · pending: unmet gates after it, dim.
-export type Tone = 'met' | 'blocker' | 'pending'
+// met: green · warn: met but worth a look, amber · blocker: the first unmet gate, red · pending: unmet gates after it, dim.
+export type Tone = 'met' | 'warn' | 'blocker' | 'pending'
 
 export const ARROW = ' ─▶ '
 export const DOWN = '└▶ '
 
 // The 0.4.0 rules when they were read, otherwise GitHub's own reviewDecision, then checks, freshness and conflicts.
-export function gates(pr: Pr, info: Detail, rules?: Rules): Gate[] {
+export function gates(pr: Pr, info: Detail, rules?: Rules, divergence?: Divergence): Gate[] {
   const known = rules?.state === 'rules' ? rules : undefined
   const list: Gate[] = []
   if (pr.reviewDecision === 'CHANGES_REQUESTED') {
@@ -28,7 +34,12 @@ export function gates(pr: Pr, info: Detail, rules?: Rules): Gate[] {
   const { passed, failed, pending } = info.checks
   const total = passed + failed + pending
   list.push({ name: 'checks', label: total === 0 ? 'no checks' : `checks ${passed}/${total}`, isMet: failed === 0 && pending === 0 })
-  list.push({ name: 'up-to-date', label: pr.mergeStateStatus === 'BEHIND' ? 'behind base' : 'up to date', isMet: pr.mergeStateStatus !== 'BEHIND' })
+  // GitHub reads BEHIND only when the base requires an up-to-date branch; otherwise a head that is behind reads
+  // CLEAN, so the compare API's count is what says it is behind.
+  const behind = divergence !== undefined && divergence.error === undefined ? divergence.behind : 0
+  if (pr.mergeStateStatus === 'BEHIND') list.push({ name: 'up-to-date', label: behind > 0 ? `${behind} behind base` : 'behind base', isMet: false })
+  else if (behind > 0) list.push({ name: 'up-to-date', label: `${behind} behind (not required)`, isMet: true, isWarning: true })
+  else list.push({ name: 'up-to-date', label: 'up to date', isMet: true })
   const isConflict = pr.mergeable === 'CONFLICTING' || pr.mergeStateStatus === 'DIRTY'
   list.push({ name: 'mergeable', label: pr.isDraft ? 'draft' : isConflict ? 'conflicts' : 'mergeable', isMet: !pr.isDraft && !isConflict })
 
@@ -38,7 +49,7 @@ export function gates(pr: Pr, info: Detail, rules?: Rules): Gate[] {
 export function tones(list: Gate[]): Tone[] {
   const first = list.findIndex(gate => !gate.isMet)
 
-  return list.map((gate, at) => (gate.isMet ? 'met' : at === first ? 'blocker' : 'pending'))
+  return list.map((gate, at) => (gate.isMet ? (gate.isWarning === true ? 'warn' : 'met') : at === first ? 'blocker' : 'pending'))
 }
 
 // One row when the chain fits the pane, else one gate per row.
@@ -66,6 +77,7 @@ export function mermaid(pr: Pr, info: Detail, list: Gate[], divergence?: Diverge
     ...list.map((gate, at) => `  g${at}[${quote(gate.label)}]:::${shade[at]}`),
     `  ${list.map((_, at) => `g${at}`).join(' --> ')}`,
     '  classDef met fill:#dcfce7,stroke:#16a34a,color:#14532d',
+    '  classDef warn fill:#fef3c7,stroke:#d97706,color:#78350f',
     '  classDef blocker fill:#fee2e2,stroke:#dc2626,color:#7f1d1d',
     '  classDef pending fill:#f3f4f6,stroke:#9ca3af,color:#6b7280',
   ]

@@ -12,10 +12,11 @@ tasks:
   - prs-4
   - prs-5
   - prs-8
+  - prs-10
 generated:
   by: lore/0.13.0
   at: 2026-10-19T17:50:47.166Z
-lore_task_status: done
+lore_task_status: in-progress
 ---
 
 # pr-pane visibility controls
@@ -45,6 +46,7 @@ colleague asked for a way to toggle its visibility or expand and collapse it.
 | [PRS-4](../../.quest/completed/PRS-4.json) | pr-pane 0.3.3: name a configure command that works | Done |
 | [PRS-5](../../.quest/completed/PRS-5.json) | pr-pane 0.3.4: make the /prs autoOpen shell hint pasteable | Done |
 | [PRS-8](../../.quest/completed/PRS-8.json) | pr-pane 0.6.0: tell people how to get the docked pane | Done |
+| [PRS-10](../../.quest/tasks/PRS-10.json) | pr-pane 0.6.1: reject unknown /prs arguments | In Progress |
 <!-- lore:tasks:end -->
 
 ## Notes

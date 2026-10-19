@@ -197,7 +197,7 @@ async function diagram($: EngineInterface, n: number, isPost: boolean): Promise<
   const info = await fetchDetail($, n)
   if ('error' in info) return `Couldn't load #${n}: ${info.error}`
   const [branchRules, divergence] = await Promise.all([loadRules($, info.baseRefName), loadDivergence($, info)])
-  const text = mermaid(pr, info, gates(pr, info, branchRules), divergence)
+  const text = mermaid(pr, info, gates(pr, info, branchRules, divergence), divergence)
   let copied: string
   try {
     const result = await $.ui.copy({ text })
@@ -529,6 +529,7 @@ export const register: Register = (on, options) => {
       await $.ui.close({ id: PANE })
       return { text: 'Pull requests pane closed. Run /prs to open it again.' }
     }
+    if (!['', 'show', 'refresh'].includes(arg)) return { text: `/prs doesn't know "${arg}". Run /prs help for the commands.` }
     void refresh($)
     if (arg === 'refresh') return { text: 'Refreshing open PRs.' }
     await $.ui.open({ id: PANE, title: 'Pull requests' })
@@ -753,7 +754,7 @@ export const register: Register = (on, options) => {
                   )
                 })()}
                 {(() => {
-                  const list = gates(pr, info, ruleMap[rulesKey(repo, info.baseRefName)])
+                  const list = gates(pr, info, ruleMap[rulesKey(repo, info.baseRefName)], branchMap[divergenceKey(repo, info)])
                   const shade = tones(list)
                   const toneOf = (gate: (typeof list)[number]) => shade[list.indexOf(gate)]
                   return (
@@ -764,7 +765,7 @@ export const register: Register = (on, options) => {
                           {row.map((gate, i) => (
                             <Text key={`gate-${gate.name}`}>
                               {i > 0 && <Text dimColor>{ARROW}</Text>}
-                              <Text color={toneOf(gate) === 'met' ? 'success' : toneOf(gate) === 'blocker' ? 'error' : undefined} dimColor={toneOf(gate) === 'pending'}>
+                              <Text color={toneOf(gate) === 'met' ? 'success' : toneOf(gate) === 'warn' ? 'warning' : toneOf(gate) === 'blocker' ? 'error' : undefined} dimColor={toneOf(gate) === 'pending'}>
                                 {gate.label}
                               </Text>
                             </Text>

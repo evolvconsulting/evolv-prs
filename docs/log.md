@@ -18,3 +18,4 @@
 - 2026-10-19T16:29:14-05:00 c8ffa60f6824b726de5b7da852ca735a1ebfcc05 ` Escape < and > in Mermaid labels; record the mermaid parser check (PRS-7) `
 - 2026-10-19T16:36:19-05:00 442e1bd1dcab41c5280fce028fcabcc0ecfdb04d pr-pane 0.5.0: merge-readiness gates, branch view and /prs diagram (PRS-7) (#9)
 - 2026-10-19T16:41:53-05:00 f93300df60f7a1db9646e57e3b3fdfa21547bb7e pr-pane 0.6.0: tell people how to get the docked pane (PRS-8)
+- 2026-10-19T17:00:38-05:00 4ba91d1c065fbb278fe8a4b139ac46b0d756ab11 pr-pane 0.6.0: tell people how to get the docked pane (PRS-8) (#10)
