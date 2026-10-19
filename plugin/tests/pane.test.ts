@@ -2,6 +2,16 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+// Every hint line must paste into a shell as printed: the only pipe is the leading `echo '{...}' |`, its value
+// is a real boolean, and nothing else holds <, > or |, which a shell would read as a redirect or another pipe.
+function expectPasteable(text: string, values: string[]): void {
+  const lines = text.split('\n').slice(1)
+  const commands = lines.map(line => line.trim()).filter(line => line.startsWith('echo '))
+  expect(commands.map(line => /^echo '\{"autoOpen":"(true|false)"\}' \| (.*)$/.exec(line)?.[1])).toEqual(values)
+  for (const line of commands) expect(/[<>|]/.test(line.replace(/^echo '[^']*' \| /, ''))).toBe(false)
+  for (const line of lines.filter(one => !one.trim().startsWith('echo '))) expect(/[<>|]/.test(line)).toBe(false)
+}
+
 const START = { cwd: '/repo', surface: 'terminal', isInteractive: true } as const
 const TYPED = { origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } } as const
 const PROPS = { title: 'Pull requests', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 20 }, view: {} } as const
@@ -128,11 +138,14 @@ test('/prs autoOpen without a /config row reports the options and changes nothin
   const calls = engine(on, false, undefined, true)
   await $.session.start(START)
   const say = async (args: string) => (await $.command.run({ ...TYPED, command: 'prs', args })).text
-  expect(await say('autoOpen')).toContain("Auto-open is on: the pane opens at session start, from the plugin's options")
+  const status = await say('autoOpen')
+  expect(status).toContain("Auto-open is on: the pane opens at session start, from the plugin's options")
+  expectPasteable(status, ['true', 'false'])
   for (const verb of ['enable', 'disable']) {
     const text = await say(`autoOpen ${verb}`)
     expect(text).toContain('Auto-open is unchanged: this session has no /config row for it.')
-    expect(text).toContain(`echo '{"autoOpen":"${verb === 'enable'}"}' | claude plugin configure pr-pane@<marketplace> --values-stdin`)
+    expect(text).toContain(`echo '{"autoOpen":"${verb === 'enable'}"}' | claude plugin configure pr-pane@evolv-marketplace --values-stdin`)
+    expectPasteable(text, [String(verb === 'enable')])
   }
   expect(calls.autoOpen).toBe(false)
   await drain($)
@@ -144,6 +157,6 @@ test('/prs autoOpen reports a rejected write instead of failing', async ($, on) 
   const run = await $.command.run({ ...TYPED, command: 'prs', args: 'autoOpen enable' })
   expect(run.text).toContain('Auto-open is unchanged:')
   // The kit skips a throwing hook and rejects with its own text, so only the outcome is checked.
-  expect(run.text).toContain(`echo '{"autoOpen":"true"}' | claude plugin configure pr-pane@`)
+  expect(run.text).toContain(`echo '{"autoOpen":"true"}' | claude plugin configure pr-pane@evolv-marketplace --values-stdin`)
   await drain($)
 })

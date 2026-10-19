@@ -176,10 +176,16 @@ async function isShowing($: EngineInterface): Promise<boolean> {
   return (await $.ui.panes()).some(pane => pane.id === PANE && pane.isPlaced && pane.isShown)
 }
 
-// A plugin's $ knows its name, not its install id, so the hint shows the evolv catalog's id as the example.
-function configure(value: 'true' | 'false' | 'true|false'): string {
-  return `Change it in /config in an interactive session, or from a shell: echo '{"autoOpen":"${value}"}' | `
-    + 'claude plugin configure pr-pane@<marketplace> --values-stdin (pr-pane@evolv-marketplace for the evolv install).'
+// A plugin's $ knows its name, not its install id, so the commands name the evolv catalog's install, and every
+// line pastes into a shell as printed: no placeholder, nothing a shell reads as a redirect.
+const INSTALL_ID = 'pr-pane@evolv-marketplace'
+
+function configure(values: boolean[]): string {
+  return [
+    'Change it in /config in an interactive session, or from a shell:',
+    ...values.map(isOn => `  echo '{"autoOpen":"${isOn}"}' | claude plugin configure ${INSTALL_ID} --values-stdin`),
+    'If you installed pr-pane from somewhere else, use the id that claude plugin list shows.',
+  ].join('\n')
 }
 
 function describe(isOn: boolean): string {
@@ -199,18 +205,18 @@ async function autoOpenRow($: EngineInterface): Promise<ConfigRow | undefined> {
 async function autoOpen($: EngineInterface, value: string | undefined, fromOptions: boolean): Promise<string> {
   const row = await autoOpenRow($)
   if (value === undefined) {
-    if (row === undefined) return `Auto-open is ${describe(fromOptions)}, from the plugin's options (this session has no /config row for it). ${configure('true|false')}`
+    if (row === undefined) return `Auto-open is ${describe(fromOptions)}, from the plugin's options (this session has no /config row for it).\n${configure([true, false])}`
     const lock = row.isLocked ? ' Your organization sets it, so it can\'t be changed here.' : ''
     return `Auto-open is ${describe(row.value === true)}. It's the pr-pane autoOpen row in /config, off by default.${lock}`
   }
   if (value !== 'enable' && value !== 'disable') return 'Usage: /prs autoOpen [enable|disable]'
   const isOn = value === 'enable'
-  if (row === undefined) return `Auto-open is unchanged: this session has no /config row for it. ${configure(isOn ? 'true' : 'false')}`
+  if (row === undefined) return `Auto-open is unchanged: this session has no /config row for it.\n${configure([isOn])}`
   try {
     const result = await $.config.set({ key: AUTO_OPEN_ROW, value: isOn })
     if (result.deny !== undefined) return `Auto-open is unchanged: ${result.deny}`
   } catch (err) {
-    return `Auto-open is unchanged: ${String(err)}. ${configure(isOn ? 'true' : 'false')}`
+    return `Auto-open is unchanged: ${String(err)}.\n${configure([isOn])}`
   }
 
   return `Auto-open is now ${describe(isOn)}. This is the pr-pane autoOpen row in /config.`
