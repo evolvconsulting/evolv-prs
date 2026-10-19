@@ -11,7 +11,7 @@ tasks:
 generated:
   by: lore/0.13.0
   at: 2026-10-19T21:22:42.903Z
-lore_task_status: in-progress
+lore_task_status: done
 ---
 
 # pr-pane diagrams
@@ -36,7 +36,7 @@ picture shareable on the PR itself.
 | Task | Title | Status |
 |---|---|---|
 | [PRS-7](../../.quest/completed/PRS-7.json) | pr-pane 0.5.0: merge-readiness gates, branch view and /prs diagram | Done |
-| [PRS-9](../../.quest/tasks/PRS-9.json) | pr-pane 0.6.1: say when a branch is behind but not required to be up to date | In Progress |
+| [PRS-9](../../.quest/completed/PRS-9.json) | pr-pane 0.6.1: say when a branch is behind but not required to be up to date | Done |
 <!-- lore:tasks:end -->
 
 ## Notes
