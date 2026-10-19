@@ -10,7 +10,7 @@ tasks:
 generated:
   by: lore/0.13.0
   at: 2026-10-19T21:08:42.735Z
-lore_task_status: in-progress
+lore_task_status: done
 ---
 
 # pr-pane branch rules
@@ -35,7 +35,7 @@ self-approval block.
 <!-- lore:tasks:begin -->
 | Task | Title | Status |
 |---|---|---|
-| [PRS-6](../../.quest/tasks/PRS-6.json) | pr-pane 0.4.0: read base-branch rules; say why a PR is blocked and who can approve | In Progress |
+| [PRS-6](../../.quest/completed/PRS-6.json) | pr-pane 0.4.0: read base-branch rules; say why a PR is blocked and who can approve | Done |
 <!-- lore:tasks:end -->
 
 ## Notes
@@ -57,3 +57,5 @@ self-approval block.
 - **Code owners:** owners come from the default branch's CODEOWNERS, where the last matching line wins. The
   viewer's teams come from `user/teams`, which needs `read:org`. Without that scope, only direct ownership counts.
 - **Cache:** rules are cached per `<repo>#<base>` in `$.state` for 10 minutes. The 60 s poll reuses them.
+- **Released:** `v0.4.0` (#8). The 403 and none paths were verified live. The rules-present path is covered by tests
+  only: no reachable repo has a ruleset, and Jeremy chose not to add one to evolv-prs.

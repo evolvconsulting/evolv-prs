@@ -12,3 +12,4 @@
 - 2026-10-19T13:34:17-05:00 9528e1eea398226e117e1798a256be5b9d6a77f9 Fix pane.test.ts typing for tsc (command.run text may be undefined)
 - 2026-10-19T16:01:16-05:00 400adaf04e09355e2e05973209217a71e2f4e2e9 pr-pane 0.3.4: make the /prs autoOpen shell hint pasteable (PRS-5) (#7)
 - 2026-10-19T16:12:51-05:00 2bd64804389d2bf3dffd989d5196edea1816d03d pr-pane 0.4.0: read base-branch rules; say why a PR is blocked (PRS-6)
+- 2026-10-19T16:13:51-05:00 73aa8c6f08d4918493a9254d8902b6002fe5d05a Test the CODEOWNERS ownership warning through the pane (PRS-6 AC4)
