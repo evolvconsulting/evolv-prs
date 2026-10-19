@@ -1,0 +1,7 @@
+{
+  "name": "pr-pane",
+  "version": "0.2.1",
+  "description": "Live pane of the current repo's open PRs via gh: approval, mergeability, reviewers, toasts for new PRs, and review/merge actions with agentic-PR guardrails",
+  "author": { "name": "evolv Consulting" },
+  "types": "./types/index.d.ts"
+}
