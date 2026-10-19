@@ -132,7 +132,7 @@ test('/prs autoOpen without a /config row reports the options and changes nothin
   for (const verb of ['enable', 'disable']) {
     const text = await say(`autoOpen ${verb}`)
     expect(text).toContain('Auto-open is unchanged: this session has no /config row for it.')
-    expect(text).toContain('claude plugin configure pr-pane')
+    expect(text).toContain(`echo '{"autoOpen":"${verb === 'enable'}"}' | claude plugin configure pr-pane@<marketplace> --values-stdin`)
   }
   expect(calls.autoOpen).toBe(false)
   await drain($)
@@ -144,6 +144,6 @@ test('/prs autoOpen reports a rejected write instead of failing', async ($, on) 
   const run = await $.command.run({ ...TYPED, command: 'prs', args: 'autoOpen enable' })
   expect(run.text).toContain('Auto-open is unchanged:')
   // The kit skips a throwing hook and rejects with its own text, so only the outcome is checked.
-  expect(run.text).toContain('claude plugin configure pr-pane')
+  expect(run.text).toContain(`echo '{"autoOpen":"true"}' | claude plugin configure pr-pane@`)
   await drain($)
 })
