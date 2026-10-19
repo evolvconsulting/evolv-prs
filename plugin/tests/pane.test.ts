@@ -21,15 +21,37 @@ const START = { cwd: '/repo', surface: 'terminal', isInteractive: true } as cons
 const TYPED = { origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } } as const
 const PROPS = { title: 'Pull requests', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 20 }, view: {} } as const
 
-// Stands in for the engine beneath the plugin: gh fails, nothing is stored, the pane calls are recorded, and
-// the /config row holds what config.set wrote (`deny` refuses every write, as a policy-locked row does;
-// `isHeadless` lists no row and rejects the write, as a -p session does; `reject` makes the write throw).
-function engine(on: On, isShowing = false, deny?: string, isHeadless = false, reject?: string) {
-  const calls = { opened: 0, closed: 0, stored: [] as unknown[], autoOpen: false }
+type Gh = (argv: string[]) => { ok: true; out: string } | { ok: false; err: string }
+
+type Stubs = {
+  isShowing?: boolean
+  // config.set refuses every write with this reason, as a policy-locked row does.
+  deny?: string
+  // No /config row, and config.set rejects, as a -p session.
+  isHeadless?: boolean
+  // config.set throws with this message.
+  reject?: string
+  // Answers each gh call; left out, every gh call fails.
+  gh?: Gh
+}
+
+// Stands in for the engine beneath the plugin: nothing is stored, the pane calls and gh argv are recorded, the
+// clock reads `calls.now`, and the /config row holds what config.set wrote.
+function engine(on: On, { isShowing = false, deny, isHeadless = false, reject, gh }: Stubs = {}) {
+  const calls = { opened: 0, closed: 0, stored: [] as unknown[], autoOpen: false, gh: [] as string[][], now: Date.parse('2026-10-19T12:00:00Z') }
   on('session.start', async ($, e) => ({ cwd: e.cwd }))
   on('command.register', async ($, e) => ({ value: { command: e.name } }))
-  on('process.run', async () => ({ value: { exitCode: 1, stdout: '', stderr: 'offline', isStdoutTruncated: false, isStderrTruncated: false } }))
-  on('clock.now', async () => ({ value: Date.parse('2026-10-19T12:00:00Z') }))
+  on('process.run', async ($, e) => {
+    const argv = [...e.argv].slice(1)
+    calls.gh.push(argv)
+    const answer = gh?.(argv) ?? { ok: false, err: 'offline' }
+    return {
+      value: answer.ok
+        ? { exitCode: 0, stdout: answer.out, stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
+        : { exitCode: 1, stdout: '', stderr: answer.err, isStdoutTruncated: false, isStderrTruncated: false },
+    }
+  })
+  on('clock.now', async () => ({ value: calls.now }))
   on('clock.every', async () => ({ value: undefined }))
   on('store.get', async () => ({ value: null }))
   on('store.set', async ($, e) => {
@@ -104,7 +126,7 @@ test('/prs autoOpen writes the /config row and reports it', async ($, on) => {
 })
 
 test('/prs autoOpen says so when the row is locked', async ($, on) => {
-  engine(on, false, 'Set by your organization.')
+  engine(on, { deny: 'Set by your organization.' })
   await $.session.start(START)
   const run = await $.command.run({ ...TYPED, command: 'prs', args: 'autoOpen enable' })
   expect(run.text).toBe('Auto-open is unchanged: Set by your organization.')
@@ -113,7 +135,7 @@ test('/prs autoOpen says so when the row is locked', async ($, on) => {
 })
 
 test('/prs closes a showing pane; show and hide are explicit', async ($, on) => {
-  const calls = engine(on, true)
+  const calls = engine(on, { isShowing: true })
   await $.session.start(START)
   await $.command.run({ ...TYPED, command: 'prs', args: '' })
   expect(calls.closed).toBe(1)
@@ -140,7 +162,7 @@ test('z folds the pane to one line and back, and remembers it', async ($, on) =>
 })
 
 test('/prs autoOpen without a /config row reports the options and changes nothing', { options: { autoOpen: true } }, async ($, on) => {
-  const calls = engine(on, false, undefined, true)
+  const calls = engine(on, { isHeadless: true })
   await $.session.start(START)
   const say = async (args: string) => (await $.command.run({ ...TYPED, command: 'prs', args })).text
   const status = await say('autoOpen')
@@ -157,12 +179,63 @@ test('/prs autoOpen without a /config row reports the options and changes nothin
 })
 
 test('/prs autoOpen reports a rejected write instead of failing', async ($, on) => {
-  engine(on, false, undefined, false, 'the row only changes in its dialog')
+  engine(on, { reject: 'the row only changes in its dialog' })
   await $.session.start(START)
   const run = await $.command.run({ ...TYPED, command: 'prs', args: 'autoOpen enable' })
   expect(run.text).toContain('Auto-open is unchanged:')
   // The kit skips a throwing hook and rejects with its own text, so only the outcome is checked.
   expect(run.text).toContain(`echo '{"autoOpen":"true"}' | claude plugin configure pr-pane@evolv-marketplace --values-stdin`)
   expectPasteable(run.text, ['true'], true)
+  await drain($)
+})
+
+// One PR, #7, into dev, whose ruleset needs one approval from someone other than the last pusher; the viewer
+// (`rev`) authored the head commit.
+function repo(rules: unknown): Gh {
+  const PR = {
+    number: 7, title: 'Fix', author: { login: 'dev' }, headRefName: 'feat/x', createdAt: '2026-10-19T10:00:00Z',
+    isDraft: false, reviewDecision: 'REVIEW_REQUIRED', mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED',
+    additions: 1, deletions: 0, changedFiles: 1, latestReviews: [], url: 'u',
+  }
+  const DETAIL = {
+    number: 7, headRefOid: 'abc1234def', headRefName: 'feat/x', baseRefName: 'dev', additions: 1, deletions: 0,
+    changedFiles: 1, commits: [], files: [{ path: 'src/a.ts' }], labels: [], reviews: [], statusCheckRollup: [], body: '',
+  }
+
+  return argv => {
+    const [verb, sub] = argv
+    const path = argv.find(arg => arg.startsWith('repos/')) ?? ''
+    if (verb === 'api' && sub === 'user') return { ok: true, out: 'rev\n' }
+    if (verb === 'repo') return { ok: true, out: 'o/r\n' }
+    if (verb === 'pr' && sub === 'list') return { ok: true, out: JSON.stringify([PR]) }
+    if (verb === 'pr' && sub === 'view') return { ok: true, out: JSON.stringify(DETAIL) }
+    if (path.endsWith('/files?per_page=100')) return { ok: true, out: 'src/a.ts\n' }
+    if (path.endsWith('/rules/branches/dev')) return { ok: true, out: JSON.stringify(rules) }
+    if (path.endsWith('/commits/abc1234def')) return { ok: true, out: 'rev rev\n' }
+    return { ok: false, err: 'gh: Not Found (HTTP 404)' }
+  }
+}
+
+test('the detail view shows the rules, refuses the last pusher, and refetches rules only after 10 minutes', async ($, on) => {
+  const calls = engine(on, {
+    gh: repo([{ type: 'pull_request', parameters: { required_approving_review_count: 1, require_last_push_approval: true } }]),
+  })
+  const fetches = () => calls.gh.filter(argv => argv.some(arg => arg.endsWith('/rules/branches/dev'))).length
+  await $.session.start(START)
+  await drain($)
+  const ui = await $.ui.mount({ plugin: 'pr-pane', surface: 'terminal', component: 'Pane', props: PROPS, requestId: 'pr-pane' })
+  await ui.press({ key: 'row-7' })
+  expect(await ui.find({ text: /rules on dev: needs 1 approval \(has 0\) · the last pusher can't approve \[rulesets\]/ })).toBeDefined()
+  expect(fetches()).toBe(1)
+
+  await ui.press({ key: 'approve' })
+  expect(await ui.find({ text: /you authored or committed the head commit abc1234, so GitHub won't count your approval/ })).toBeDefined()
+  expect(calls.gh.some(argv => argv[0] === 'pr' && argv[1] === 'review')).toBe(false)
+
+  await ui.press({ key: 'refresh' })
+  expect(fetches()).toBe(1)
+  calls.now += 11 * 60_000
+  await ui.press({ key: 'refresh' })
+  expect(fetches()).toBe(2)
   await drain($)
 })

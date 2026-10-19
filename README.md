@@ -5,11 +5,16 @@ A Claude Code mod that shows the current repo's open pull requests in a pane, us
 - **List:** each PR's author, created date, approval state, merge state and latest reviewers. PRs that look agent-authored or are large get a badge.
 - **Toasts:** a toast for each new PR. The list refreshes every 60 s.
 - **Detail view:** select a PR to see its branches, size, checks, sensitive paths, full review history and description.
+- **Branch rules:** the detail view shows the base branch's rules and how the PR stands against them, for example `rules on dev: needs 2 approvals (has 1) · CODEOWNERS review required · the last pusher can't approve · required: ci, lint (lint failing) [rulesets]`.
+  - The rules come from the branch's rulesets. Classic branch protection is added when it can be read, which needs admin access. They're cached for 10 minutes per branch.
+  - A private repo on GitHub's free plan reads `not readable here`, because GitHub enforces no rules there.
 - **Actions:** code review, approve, comment, request changes, merge, update branch, re-run failed checks, open and close.
 - **Guardrails:**
-  - Merge and close need a confirming press. Merge lists what's missing (approval, passing checks) and is pinned to the commit you confirmed.
+  - Merge and close need a confirming press. Merge lists the base branch's unmet rules (approvals, code owner review, required checks), or `No approving review` when there are no rules to read. It is pinned to the commit you confirmed.
   - Approve and merge reload the PR first and stop if new commits landed since you looked.
   - Approve pauses on agent-authored PRs whose diff you haven't opened, on workflow, CODEOWNERS or auth paths, on PRs over 400 lines, and on failing checks.
+  - Approve also pauses when the branch requires a code owner's review and you own none of the changed paths. Teams count, if your token can list them.
+  - Approve refuses when the branch requires approval from someone other than the last pusher and you authored or committed the head commit. GitHub doesn't expose who pushed, so the head commit stands in for the pusher.
   - Re-run warns after a run has been re-run twice.
   - Feedback uses Conventional Comments labels.
   - Every action is logged with actor, commit and time.

@@ -45,7 +45,25 @@ export type Detail = {
   sensitive: string[]
   // Paths checked for sensitivity; fewer than changedFiles when the file list was cut.
   filesChecked: number
+  // Whether the viewer is a CODEOWNERS owner of any changed path; null when CODEOWNERS or the viewer is unknown.
+  viewerOwns: boolean | null
   body: string
+}
+
+// The base branch's merge rules, from rulesets and (when the viewer is an admin) classic branch protection.
+export type Rules = {
+  base: string
+  // rules: something is required · none: readable, nothing required · unreadable: 403 (free plan, private repo)
+  state: 'rules' | 'none' | 'unreadable' | 'error'
+  // Which endpoints answered: 'rulesets', 'branch protection'.
+  sources: string[]
+  approvals: number
+  isCodeOwnerReview: boolean
+  isLastPushApproval: boolean
+  isDismissStale: boolean
+  requiredChecks: string[]
+  error?: string
+  checkedAt: number
 }
 
 export type ActionKind =
@@ -103,6 +121,8 @@ declare module 'claude-code' {
       diffViewed: string[]
       audit: AuditEntry[]
       reruns: Record<string, number>
+      // Per `<repo>#<base>`, refetched after RULES_TTL_MS.
+      rules: Record<string, Rules>
     }
   }
 }

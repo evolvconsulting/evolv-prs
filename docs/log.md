@@ -10,3 +10,4 @@
 - 2026-10-19T13:21:40-05:00 acd902354ff64681970c91f09d93d6949e501fb3 pr-pane 0.3.3: name a configure command that works (PRS-4) (#6)
 - 2026-10-19T13:33:30-05:00 a1b5a3eaf191b7a55d2693c455e4a35f25876151 pr-pane 0.3.4: make the /prs autoOpen shell hint pasteable (PRS-5)
 - 2026-10-19T13:34:17-05:00 9528e1eea398226e117e1798a256be5b9d6a77f9 Fix pane.test.ts typing for tsc (command.run text may be undefined)
+- 2026-10-19T16:01:16-05:00 400adaf04e09355e2e05973209217a71e2f4e2e9 pr-pane 0.3.4: make the /prs autoOpen shell hint pasteable (PRS-5) (#7)

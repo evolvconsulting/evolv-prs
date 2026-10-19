@@ -1,11 +1,12 @@
 import { atom, read, update } from 'claude-code'
 import type { ConfigRow, EngineInterface, Register } from 'claude-code'
 
-import type { Action, AuditEntry, Detail, Pr, Snapshot } from '../types'
+import type { Action, AuditEntry, Detail, Pr, Rules, Snapshot } from '../types'
 import { COMMANDS, HELP, KEYS, USAGE_WIDTH, helpText } from './keys'
 import {
-  DETAIL_FIELDS, FEEDBACK_LABELS, FIELDS, age, agentSignals, approvalWarnings, canMerge, codeownersMatcher,
-  created, diffKey, feedbackBody, isBehind, isLarge, merge, mergeWarnings, newPrs, parseDetail, parsePrs, review, reviewState, summary, when,
+  DETAIL_FIELDS, FEEDBACK_LABELS, FIELDS, RULES_TTL_MS, age, agentSignals, approvalWarnings, canMerge, codeownersMatcher,
+  codeownersOwners, created, diffKey, feedbackBody, isBehind, isLarge, isLastPusher, merge, mergeWarnings, newPrs, ownsAny,
+  parseDetail, parsePrs, parseRules, review, reviewState, rulesLine, summary, unmetRules, when,
 } from './prs'
 
 const PANE = 'pr-pane'
@@ -31,9 +32,13 @@ const who = atom({ plugin: 'pr-pane', key: 'who' } as const, null)
 const diffViewed = atom({ plugin: 'pr-pane', key: 'diffViewed' } as const, [])
 const audit = atom({ plugin: 'pr-pane', key: 'audit' } as const, [])
 const reruns = atom({ plugin: 'pr-pane', key: 'reruns' } as const, {})
+const rules = atom({ plugin: 'pr-pane', key: 'rules' } as const, {})
 
 // CODEOWNERS from the default branch, loaded once per module load.
 let owned: ((path: string) => boolean) | undefined
+let ownersOf: ((path: string) => string[]) | undefined
+// The viewer's teams as `org/slug`; empty when the token can't list them (no read:org), so only direct ownership counts.
+let teams: string[] = []
 // Whether the pane held the keyboard at its last draw; tells a focus entering from one moving inside.
 let wasFocused = false
 // Settles once the viewer, repo and CODEOWNERS are loaded; guarded actions wait on it.
@@ -66,7 +71,12 @@ async function loadContext($: EngineInterface): Promise<void> {
   const files = await Promise.all(CODEOWNERS_PATHS.map(path =>
     gh($, ['api', `repos/{owner}/{repo}/contents/${path}`, '-H', 'Accept: application/vnd.github.raw'])))
   const file = files.find(one => one.ok)
-  if (file !== undefined) owned = codeownersMatcher(file.out)
+  if (file !== undefined) {
+    owned = codeownersMatcher(file.out)
+    ownersOf = codeownersOwners(file.out)
+  }
+  const mine = await gh($, ['api', '--paginate', 'user/teams', '--jq', '.[] | "\\(.organization.login)/\\(.slug)"'])
+  if (mine.ok) teams = mine.out.split('\n').filter(line => line !== '')
   const stored = await $.store.get('audit')
   if (Array.isArray(stored)) await update($, audit, () => stored as AuditEntry[])
   const counts = await $.store.get('reruns')
@@ -126,10 +136,38 @@ async function loadDetail($: EngineInterface, n: number): Promise<Detail | null>
   // A slower response for a PR no longer selected must not overwrite the current one.
   if ((await read($, selected)) !== n) return null
   const paths = listed.ok ? listed.out.split('\n').filter(line => line !== '') : undefined
+  const ctx = await read($, who)
   const value = ran.ok ? parseDetail(ran.out, owned, paths) : { number: n, error: ran.out }
+  if (!('error' in value) && ownersOf !== undefined && paths !== undefined && ctx !== null && ctx.viewer !== 'unknown') {
+    value.viewerOwns = ownsAny(paths, ownersOf, ctx.viewer, teams)
+  }
   await update($, detail, () => value)
+  if ('error' in value) return null
+  await loadRules($, value.baseRefName)
 
-  return 'error' in value ? null : value
+  return value
+}
+
+function rulesKey(repo: string, base: string): string {
+  return `${repo}#${base}`
+}
+
+// The base branch's rules, fetched at most once per RULES_TTL_MS for each repo and base: the poll runs every
+// 60 s and rules rarely change.
+async function loadRules($: EngineInterface, base: string): Promise<Rules> {
+  const key = rulesKey((await read($, who))?.repo ?? '?', base)
+  const now = await $.clock.now()
+  const cached = (await read($, rules))[key]
+  if (cached !== undefined && now - cached.checkedAt < RULES_TTL_MS) return cached
+  const branch = encodeURIComponent(base)
+  const [rulesets, protection] = await Promise.all([
+    gh($, ['api', `repos/{owner}/{repo}/rules/branches/${branch}`]),
+    gh($, ['api', `repos/{owner}/{repo}/branches/${branch}/protection`]),
+  ])
+  const value = parseRules(base, rulesets, protection, now)
+  await update($, rules, map => ({ ...map, [key]: value }))
+
+  return value
 }
 
 // Reloads the PR (after CODEOWNERS has loaded) and checks no commit landed since the person
@@ -294,7 +332,20 @@ async function approve($: EngineInterface, pr: Pr, seenSha: string, isForced: bo
   await setAction($, { number: pr.number, kind: 'busy', text: `Checking #${pr.number} is unchanged...` })
   const info = await freshDetail($, pr.number, seenSha)
   if (info === null) return
-  const warnings = approvalWarnings(pr, info, (await read($, diffViewed)).includes(diffKey(info)))
+  const branchRules = await loadRules($, info.baseRefName)
+  if (ctx !== null && branchRules.isLastPushApproval) {
+    const head = await gh($, ['api', `repos/{owner}/{repo}/commits/${info.headRefOid}`, '--jq', '[.author.login, .committer.login] | map(select(. != null)) | join(" ")'])
+    if (head.ok && isLastPusher(ctx.viewer, head.out.trim().split(' '))) {
+      await setAction($, {
+        number: pr.number,
+        kind: 'error',
+        text: `${info.baseRefName} needs approval from someone other than the last pusher, and you authored or committed the head commit `
+          + `${info.headRefOid.slice(0, 7)}, so GitHub won't count your approval. (Judged from the head commit; GitHub doesn't expose the pusher.)`,
+      })
+      return
+    }
+  }
+  const warnings = approvalWarnings(pr, info, (await read($, diffViewed)).includes(diffKey(info)), branchRules)
   if (warnings.length > 0 && !isForced) {
     await setAction($, { number: pr.number, kind: 'confirm-approve', text: '', warnings, sha: info.headRefOid })
     return
@@ -310,7 +361,7 @@ async function confirmMerge($: EngineInterface, pr: Pr, seenSha: string): Promis
   await setAction($, { number: pr.number, kind: 'busy', text: `Checking #${pr.number} is unchanged...` })
   const info = await freshDetail($, pr.number, seenSha)
   if (info === null) return
-  const warnings = mergeWarnings(pr, info, (await read($, diffViewed)).includes(diffKey(info)))
+  const warnings = mergeWarnings(pr, info, (await read($, diffViewed)).includes(diffKey(info)), await loadRules($, info.baseRefName))
   await setAction($, { number: pr.number, kind: 'confirm-merge', text: '', warnings, sha: info.headRefOid })
 }
 
@@ -430,6 +481,8 @@ export const register: Register = (on, options) => {
     wasFocused = e.props.isFocused
     const mode = e.props.isFocused ? stored : 'list'
     const viewed = await read($, diffViewed)
+    const repo = (await read($, who))?.repo ?? '?'
+    const ruleMap = await read($, rules)
     const width = Math.max(20, e.props.bodyColumns)
     const rule = <Text dimColor>{'─'.repeat(width)}</Text>
 
@@ -607,6 +660,15 @@ export const register: Register = (on, options) => {
                 {info.checks.failing.length > 0 && (
                   <Text color="error" wrap="truncate-end">failing: {info.checks.failing.join(', ')}</Text>
                 )}
+                {(() => {
+                  const branchRules = ruleMap[rulesKey(repo, info.baseRefName)]
+                  const color = branchRules?.state === 'error' ? 'error'
+                    : branchRules?.state === 'rules' && unmetRules(pr, info, branchRules).length > 0 ? 'warning'
+                      : branchRules?.state === 'rules' ? 'success' : undefined
+                  return (
+                    <Text key="rules" color={color} dimColor={color === undefined} wrap="wrap">{rulesLine(branchRules, info)}</Text>
+                  )
+                })()}
                 {info.reviews.length === 0 ? (
                   <Text dimColor>reviews: none yet</Text>
                 ) : (
