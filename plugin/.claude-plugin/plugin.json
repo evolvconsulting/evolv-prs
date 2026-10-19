@@ -1,6 +1,6 @@
 {
   "name": "pr-pane",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Live pane of the current repo's open PRs via gh: approval, mergeability, reviewers, toasts for new PRs, and review/merge actions with agentic-PR guardrails",
   "author": { "name": "evolv Consulting" },
   "types": "./types/index.d.ts",
@@ -8,8 +8,8 @@
     "autoOpen": {
       "type": "boolean",
       "title": "Open the pane at session start",
-      "description": "When off, the pane opens only on /prs; the poll and new-PR toasts still run.",
-      "default": true
+      "description": "Off by default: the pane opens only on /prs. /prs autoOpen enable or disable sets this too. The poll and new-PR toasts run either way.",
+      "default": false
     }
   }
 }
