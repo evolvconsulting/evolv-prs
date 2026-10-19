@@ -13,7 +13,7 @@ tasks:
 generated:
   by: lore/0.13.0
   at: 2026-10-19T17:50:47.166Z
-lore_task_status: in-progress
+lore_task_status: done
 ---
 
 # pr-pane visibility controls
@@ -40,7 +40,7 @@ colleague asked for a way to toggle its visibility or expand and collapse it.
 | [PRS-1](../../.quest/completed/PRS-1.json) | pr-pane 0.3.0: /prs toggle, z collapse, autoOpen option | Done |
 | [PRS-2](../../.quest/completed/PRS-2.json) | pr-pane 0.3.1: autoOpen off by default, /prs autoOpen enable\|disable | Done |
 | [PRS-3](../../.quest/completed/PRS-3.json) | pr-pane 0.3.2: /prs autoOpen survives a missing /config row | Done |
-| [PRS-4](../../.quest/tasks/PRS-4.json) | pr-pane 0.3.3: name a configure command that works | In Progress |
+| [PRS-4](../../.quest/completed/PRS-4.json) | pr-pane 0.3.3: name a configure command that works | Done |
 <!-- lore:tasks:end -->
 
 ## Notes
@@ -53,5 +53,7 @@ colleague asked for a way to toggle its visibility or expand and collapse it.
   rather than naming the source.
 - A headless (`claude -p`) session has no `/config` row, and `$.config.set` rejects the key. From 0.3.2, `/prs autoOpen`
   reports `options.autoOpen` there and points to `claude plugin configure pr-pane` (PRS-3).
-- Released as `v0.3.0` (#2), `v0.3.1` (#3) and `v0.3.2` (#5). The evolv marketplace skipped 0.3.1 because of the
+- The headless hint names `claude plugin configure pr-pane@<marketplace> --values-stdin`. The bare id fails, and a
+  plugin cannot read its own install id (PRS-4, 0.3.3).
+- Released as `v0.3.0` (#2), `v0.3.1` (#3), `v0.3.2` (#5) and `v0.3.3` (#6). The evolv marketplace skipped 0.3.1 because of the
   headless bug and moves from `v0.3.0` to `v0.3.2`.
