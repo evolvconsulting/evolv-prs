@@ -2,9 +2,10 @@
 # yaml-language-server: $schema=../../.lore/schemas/arc.schema.json
 type: Arc
 title: pr-pane visibility controls
+status: stable
 tags:
   - pr-pane
-summary: Toggle, fold and opt-in auto-open for the pr-pane pane (0.3.0 and 0.3.1).
+summary: Toggle, fold, opt-in auto-open, layout guidance and argument handling for the pr-pane pane (0.3.0 to 0.6.1).
 tasks:
   - prs-1
   - prs-2
@@ -73,5 +74,7 @@ colleague asked for a way to toggle its visibility or expand and collapse it.
     setting itself.
   - The plugin types say tmux defaults to the default layout, but the user docs say fullscreen works in tmux. So
     pr-pane trusts the live `isFullscreen` value and guesses nothing from the environment.
-- Released as `v0.3.0` (#2), `v0.3.1` (#3), `v0.3.2` (#5), `v0.3.3` (#6) and `v0.3.4` (#7). The evolv marketplace skipped 0.3.1 because of the
-  headless bug and moves from `v0.3.0` to `v0.3.2`.
+- Released as `v0.3.0` (#2), `v0.3.1` (#3), `v0.3.2` (#5), `v0.3.3` (#6), `v0.3.4` (#7), `v0.6.0` (#10, layout)
+  and `v0.6.1` (#11, unknown arguments).
+- **Catalog:** the evolv catalog skipped 0.3.1 because of the headless bug, going from `v0.3.0` to `v0.3.2`. It
+  skipped 0.6.0, going from `v0.5.0` to `v0.6.1`. See [pr-pane releases](../reference/pr-pane-releases.md).

@@ -2,6 +2,7 @@
 # yaml-language-server: $schema=../../.lore/schemas/arc.schema.json
 type: Arc
 title: pr-pane branch rules
+status: stable
 tags:
   - pr-pane
 summary: Read the base branch's rulesets and protection; explain why a PR is blocked and who can approve it (0.4.0).
@@ -57,5 +58,7 @@ self-approval block.
 - **Code owners:** owners come from the default branch's CODEOWNERS, where the last matching line wins. The
   viewer's teams come from `user/teams`, which needs `read:org`. Without that scope, only direct ownership counts.
 - **Cache:** rules are cached per `<repo>#<base>` in `$.state` for 10 minutes. The 60 s poll reuses them.
+- **Catalog:** in the evolv catalog through evolv-marketplace#26. See
+  [pr-pane releases](../reference/pr-pane-releases.md).
 - **Released:** `v0.4.0` (#8). The 403 and none paths were verified live. The rules-present path is covered by tests
   only: no reachable repo has a ruleset, and Jeremy chose not to add one to evolv-prs.

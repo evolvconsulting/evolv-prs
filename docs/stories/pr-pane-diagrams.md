@@ -2,9 +2,10 @@
 # yaml-language-server: $schema=../../.lore/schemas/arc.schema.json
 type: Arc
 title: pr-pane diagrams
+status: stable
 tags:
   - pr-pane
-summary: Merge-readiness gates, the branch's ahead/behind, and a Mermaid export (0.5.0).
+summary: Merge-readiness gates, the branch's ahead/behind, and a Mermaid export (0.5.0; behind gate fixed in 0.6.1).
 tasks:
   - prs-7
   - prs-9
@@ -63,4 +64,6 @@ picture shareable on the PR itself.
 - **Behind but not required:** GitHub reports BEHIND only when the base requires an up-to-date branch. Otherwise a
   head that is behind reads CLEAN. From 0.6.1 the gate takes the count from the compare API and shows
   `<n> behind (not required)` in amber (the `warn` tone and Mermaid class) instead of a green `up to date` (PRS-9).
-- **Released:** `v0.5.0` (#9). The behind-gate fix shipped in `v0.6.1`.
+- **Released:** `v0.5.0` (#9). The behind-gate fix shipped in `v0.6.1` (#11).
+- **Catalog:** in the evolv catalog through evolv-marketplace#27 (0.5.0) and #29 (0.6.1). See
+  [pr-pane releases](../reference/pr-pane-releases.md).
