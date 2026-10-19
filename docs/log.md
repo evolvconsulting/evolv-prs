@@ -20,3 +20,4 @@
 - 2026-10-19T16:41:53-05:00 f93300df60f7a1db9646e57e3b3fdfa21547bb7e pr-pane 0.6.0: tell people how to get the docked pane (PRS-8)
 - 2026-10-19T17:00:38-05:00 4ba91d1c065fbb278fe8a4b139ac46b0d756ab11 pr-pane 0.6.0: tell people how to get the docked pane (PRS-8) (#10)
 - 2026-10-19T17:02:09-05:00 8f16f5d6635707879d8f9fe92479a060f0bbde34 pr-pane 0.6.1: behind-but-not-required gate; reject unknown /prs args (PRS-9, PRS-10)
+- 2026-10-19T17:03:11-05:00 b9add9a6f0595573b26d83503f4c7d8f98315ff0 pr-pane 0.6.1: behind-but-not-required gate; reject unknown /prs args (PRS-9, PRS-10) (#11)
