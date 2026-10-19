@@ -14,3 +14,7 @@ okf_version: "0.2"
 This is the root index of an OKF documentation bundle, created by `lore init`.
 Add concepts under `docs/` and link them from here. This file is the bundle's
 entry point and the only one that carries `okf_version`.
+
+<!-- lore:index:begin -->
+- [stories](stories/index.md)
+<!-- lore:index:end -->
