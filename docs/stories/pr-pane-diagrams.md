@@ -10,7 +10,7 @@ tasks:
 generated:
   by: lore/0.13.0
   at: 2026-10-19T21:22:42.903Z
-lore_task_status: in-progress
+lore_task_status: done
 ---
 
 # pr-pane diagrams
@@ -34,7 +34,7 @@ picture shareable on the PR itself.
 <!-- lore:tasks:begin -->
 | Task | Title | Status |
 |---|---|---|
-| [PRS-7](../../.quest/tasks/PRS-7.json) | pr-pane 0.5.0: merge-readiness gates, branch view and /prs diagram | In Progress |
+| [PRS-7](../../.quest/completed/PRS-7.json) | pr-pane 0.5.0: merge-readiness gates, branch view and /prs diagram | Done |
 <!-- lore:tasks:end -->
 
 ## Notes
@@ -58,3 +58,4 @@ picture shareable on the PR itself.
 - **Verified:** mermaid@11.4.1's parser accepts both diagrams, along with 11 awkward branch names
   (checked by evolv-marketplace).
 - **Not verified:** how GitHub draws a posted comment. Nothing was posted during development.
+- **Released:** `v0.5.0` (#9).
