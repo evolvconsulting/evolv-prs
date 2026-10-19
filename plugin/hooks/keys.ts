@@ -14,6 +14,7 @@ export const KEYS = {
   open: 'o',
   close: 'x',
   back: 'b',
+  collapse: 'z',
 } as const
 
 export type KeyName = keyof typeof KEYS
@@ -26,6 +27,7 @@ export const HELP: { section: string; rows: { name: KeyName | 'rows'; key: strin
       { name: 'refresh', key: KEYS.refresh, what: 'Refresh now (also every 60 s)' },
       { name: 'log', key: KEYS.log, what: 'Show the action log (Esc also closes it)' },
       { name: 'help', key: KEYS.help, what: 'Show or hide this help (Esc also closes it)' },
+      { name: 'collapse', key: KEYS.collapse, what: 'Fold the pane to one summary line, or expand it' },
     ],
   },
   {
@@ -52,7 +54,9 @@ export const HELP: { section: string; rows: { name: KeyName | 'rows'; key: strin
 ]
 
 export const COMMANDS = [
-  { usage: '/prs', what: 'Open the pane and refresh' },
+  { usage: '/prs', what: 'Open the pane, or close it if it is showing' },
+  { usage: '/prs show', what: 'Open the pane and refresh' },
+  { usage: '/prs hide', what: 'Close the pane' },
   { usage: '/prs help', what: 'Print the commands and hotkeys' },
   { usage: '/prs log', what: 'Print the last 20 logged actions' },
   { usage: '/prs refresh', what: 'Refresh now' },

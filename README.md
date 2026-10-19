@@ -32,7 +32,9 @@ To work on it, see `CLAUDE.md`. The plugin itself lives in `plugin/`.
 
 | Command | What it does |
 |---|---|
-| `/prs` | Open the pane and refresh |
+| `/prs` | Open the pane, or close it if it is showing |
+| `/prs show` | Open the pane and refresh |
+| `/prs hide` | Close the pane |
 | `/prs help` | Print every command and hotkey |
 | `/prs log` | Print the last 20 logged actions |
 | `/prs refresh` | Refresh now |
@@ -43,8 +45,18 @@ Press ctrl+x tab to give the pane focus. Esc hands the keyboard back to the prom
 
 | Where | Keys |
 |---|---|
-| List | `1`–`9` or Enter open a PR · `r` refresh · `l` log · `h` help |
+| List | `1`–`9` or Enter open a PR · `r` refresh · `l` log · `h` help · `z` collapse or expand |
 | Review | `c` code review · `d` diff · `a` approve · `f` comment · `q` request changes |
 | Ship | `m` merge · `u` update branch · `t` re-run failed · `o` open · `x` close PR · `b` back |
 
 Merge, update branch and re-run appear only when they apply.
+
+`z` folds the pane to one line, such as `5 open · 2 approved · 1 checks failing · 1 conflicts`, and `z` or the expand button opens it again on the same PR. The pane stays folded across sessions. The 60 s refresh and the new-PR toasts keep running while it is folded.
+
+## Settings
+
+| Option | Default | What it does |
+|---|---|---|
+| `autoOpen` | `true` | Open the pane when a session starts. When off, run `/prs` to open it; the refresh and toasts still run. |
+
+Change it in `/config`, where it is a row under pr-pane.

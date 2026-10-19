@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { Pr } from '../types'
-import { canMerge, created, failedRunIds, isBehind, merge, newPrs, parseDetail, parsePrs, review, summarizeChecks } from '../hooks/prs'
+import { canMerge, created, failedRunIds, isBehind, merge, newPrs, parseDetail, parsePrs, review, summarizeChecks, summary } from '../hooks/prs'
 
 const RAW = JSON.stringify([
   { number: 18, title: 'A', author: { login: 'phil' }, createdAt: '2026-10-16T12:00:00Z', isDraft: false,
@@ -67,4 +67,11 @@ test('offers update branch only when behind', async () => {
   const [a] = parsePrs(RAW) as [Pr, Pr]
   expect(isBehind(a)).toBe(false)
   expect(isBehind({ ...a, mergeStateStatus: 'BEHIND' })).toBe(true)
+})
+
+test('summarizes the list in one line, zero counts left out', async () => {
+  const [a, b] = parsePrs(RAW) as [Pr, Pr]
+  expect(summary([a, b])).toBe('2 open · 1 approved · 1 conflicts')
+  expect(summary([a, { ...b, mergeable: 'MERGEABLE', mergeStateStatus: 'UNSTABLE' }])).toBe('2 open · 1 approved · 1 checks failing')
+  expect(summary([])).toBe('0 open')
 })
