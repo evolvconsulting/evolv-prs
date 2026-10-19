@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { ConfigRow, EngineInterface, Register } from 'claude-code'
 
 import type { Action, AuditEntry, Detail, Pr, Snapshot } from '../types'
 import { COMMANDS, HELP, KEYS, USAGE_WIDTH, helpText } from './keys'
@@ -176,21 +176,40 @@ async function isShowing($: EngineInterface): Promise<boolean> {
   return (await $.ui.panes()).some(pane => pane.id === PANE && pane.isPlaced && pane.isShown)
 }
 
-async function autoOpen($: EngineInterface, value: string | undefined): Promise<string> {
+const CONFIGURE = 'Change it with `claude plugin configure pr-pane` from a shell, or in /config where it is a row.'
+
+function describe(isOn: boolean): string {
+  return isOn ? 'on: the pane opens at session start' : 'off: the pane opens only on /prs'
+}
+
+// The /config row when this session has one; a headless (-p) session lists none, and set then rejects.
+async function autoOpenRow($: EngineInterface): Promise<ConfigRow | undefined> {
+  try {
+    return (await $.config.list()).find(one => one.key === AUTO_OPEN_ROW)
+  } catch {
+    return undefined
+  }
+}
+
+// `fromOptions` is options.autoOpen as this load received it: what session.start acted on.
+async function autoOpen($: EngineInterface, value: string | undefined, fromOptions: boolean): Promise<string> {
+  const row = await autoOpenRow($)
   if (value === undefined) {
-    const row = (await $.config.list()).find(one => one.key === AUTO_OPEN_ROW)
-    const isOn = row?.value === true
-    const lock = row?.isLocked === true ? ' Your organization sets it, so it can\'t be changed here.' : ''
-    return `Auto-open is ${isOn ? 'on' : 'off'}: the pane ${isOn ? 'opens at session start' : 'opens only on /prs'}. `
-      + `It's the pr-pane autoOpen row in /config, off by default.${lock}`
+    if (row === undefined) return `Auto-open is ${describe(fromOptions)}, from the plugin's options (this session has no /config row for it). ${CONFIGURE}`
+    const lock = row.isLocked ? ' Your organization sets it, so it can\'t be changed here.' : ''
+    return `Auto-open is ${describe(row.value === true)}. It's the pr-pane autoOpen row in /config, off by default.${lock}`
   }
   if (value !== 'enable' && value !== 'disable') return 'Usage: /prs autoOpen [enable|disable]'
+  if (row === undefined) return `Auto-open is unchanged: this session has no /config row for it. ${CONFIGURE}`
   const isOn = value === 'enable'
-  const result = await $.config.set({ key: AUTO_OPEN_ROW, value: isOn })
-  if (result.deny !== undefined) return `Auto-open is unchanged: ${result.deny}`
+  try {
+    const result = await $.config.set({ key: AUTO_OPEN_ROW, value: isOn })
+    if (result.deny !== undefined) return `Auto-open is unchanged: ${result.deny}`
+  } catch (err) {
+    return `Auto-open is unchanged: ${String(err)}. ${CONFIGURE}`
+  }
 
-  return `Auto-open is now ${isOn ? 'on: the pane opens at session start' : 'off: the pane opens only on /prs'}. `
-    + 'This is the pr-pane autoOpen row in /config.'
+  return `Auto-open is now ${describe(isOn)}. This is the pr-pane autoOpen row in /config.`
 }
 
 async function setAction($: EngineInterface, value: Action | null): Promise<void> {
@@ -360,7 +379,7 @@ export const register: Register = (on, options) => {
     if (arg === 'help') return { text: helpText() }
     const [verb, value, ...rest] = arg.split(/\s+/)
     if (verb?.toLowerCase() === 'autoopen') {
-      return { text: rest.length > 0 ? 'Usage: /prs autoOpen [enable|disable]' : await autoOpen($, value?.toLowerCase()) }
+      return { text: rest.length > 0 ? 'Usage: /prs autoOpen [enable|disable]' : await autoOpen($, value?.toLowerCase(), isAutoOpen) }
     }
     if (arg === 'log') {
       const list = (await read($, audit)).slice(-20)

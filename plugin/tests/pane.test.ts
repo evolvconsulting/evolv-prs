@@ -7,8 +7,9 @@ const TYPED = { origin: { kind: 'composer' }, presentation: { isFullscreen: fals
 const PROPS = { title: 'Pull requests', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 20 }, view: {} } as const
 
 // Stands in for the engine beneath the plugin: gh fails, nothing is stored, the pane calls are recorded, and
-// the /config row holds what config.set wrote (`deny` refuses every write, as a policy-locked row does).
-function engine(on: On, isShowing = false, deny?: string) {
+// the /config row holds what config.set wrote (`deny` refuses every write, as a policy-locked row does;
+// `isHeadless` lists no row and rejects the write, as a -p session does; `reject` makes the write throw).
+function engine(on: On, isShowing = false, deny?: string, isHeadless = false, reject?: string) {
   const calls = { opened: 0, closed: 0, stored: [] as unknown[], autoOpen: false }
   on('session.start', async ($, e) => ({ cwd: e.cwd }))
   on('command.register', async ($, e) => ({ value: { command: e.name } }))
@@ -33,12 +34,14 @@ function engine(on: On, isShowing = false, deny?: string) {
     return { value: undefined }
   })
   on('config.list', async () => ({
-    value: [{
+    value: isHeadless ? [] : [{
       key: 'pr-pane.autoOpen', label: 'Open the pane at session start', kind: 'boolean', value: calls.autoOpen,
       provider: { plugin: 'pr-pane', tier: 'user' }, isLocked: deny !== undefined,
     }],
   }))
   on('config.set', async ($, e) => {
+    if (isHeadless) throw new Error('no /config row has the key pr-pane.autoOpen')
+    if (reject !== undefined) throw new Error(reject)
     if (deny !== undefined) return { deny }
     expect(e.key).toBe('pr-pane.autoOpen')
     calls.autoOpen = e.value === true
@@ -119,4 +122,28 @@ test('z folds the pane to one line and back, and remembers it', async ($, on) =>
     expect(await ui.find({ key: 'collapse' })).toBeDefined()
   }
   expect(calls.stored.filter(value => typeof value === 'boolean')).toEqual([true, false, true, false])
+})
+
+test('/prs autoOpen without a /config row reports the options and changes nothing', { options: { autoOpen: true } }, async ($, on) => {
+  const calls = engine(on, false, undefined, true)
+  await $.session.start(START)
+  const say = async (args: string) => (await $.command.run({ ...TYPED, command: 'prs', args })).text
+  expect(await say('autoOpen')).toContain("Auto-open is on: the pane opens at session start, from the plugin's options")
+  for (const verb of ['enable', 'disable']) {
+    const text = await say(`autoOpen ${verb}`)
+    expect(text).toContain('Auto-open is unchanged: this session has no /config row for it.')
+    expect(text).toContain('claude plugin configure pr-pane')
+  }
+  expect(calls.autoOpen).toBe(false)
+  await drain($)
+})
+
+test('/prs autoOpen reports a rejected write instead of failing', async ($, on) => {
+  engine(on, false, undefined, false, 'the row only changes in its dialog')
+  await $.session.start(START)
+  const run = await $.command.run({ ...TYPED, command: 'prs', args: 'autoOpen enable' })
+  expect(run.text).toContain('Auto-open is unchanged:')
+  // The kit skips a throwing hook and rejects with its own text, so only the outcome is checked.
+  expect(run.text).toContain('claude plugin configure pr-pane')
+  await drain($)
 })

@@ -62,4 +62,4 @@ Merge, update branch and re-run appear only when they apply.
 |---|---|---|
 | `autoOpen` | `false` | Open the pane when a session starts. While it's off, run `/prs` to open the pane. The refresh and toasts run either way. |
 
-Change it with `/prs autoOpen enable` or `disable`, or in `/config`, where it's a row under pr-pane. Both write the same setting, so they always agree. If you set it before 0.3.1, your value stays.
+Change it with `/prs autoOpen enable` or `disable`, or in `/config`, where it's a row under pr-pane. Both write the same setting, so they always agree. If you set it before 0.3.1, your value stays. A headless (`claude -p`) session has no `/config` row, so there `/prs autoOpen` reports the plugin's options and leaves them unchanged. Use `claude plugin configure pr-pane` from a shell instead.
