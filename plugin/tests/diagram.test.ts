@@ -68,6 +68,7 @@ test('writes both diagrams as fenced Mermaid', async () => {
     '  g4["mergeable"]:::met',
     '  g0 --> g1 --> g2 --> g3 --> g4',
     '  classDef met fill:#dcfce7,stroke:#16a34a,color:#14532d',
+    '  classDef warn fill:#fef3c7,stroke:#d97706,color:#78350f',
     '  classDef blocker fill:#fee2e2,stroke:#dc2626,color:#7f1d1d',
     '  classDef pending fill:#f3f4f6,stroke:#9ca3af,color:#6b7280',
     '```',
@@ -80,4 +81,16 @@ test('writes both diagrams as fenced Mermaid', async () => {
   expect(mermaid(PR, INFO, gates(PR, INFO), { ...BRANCH, error: 'x' })).not.toContain('flowchart RL')
   expect(mermaid({ ...PR }, INFO, [{ name: 'approvals', label: 'say "hi"', isMet: true }])).toContain('g0["say #quot;hi#quot;"]:::met')
   expect(mermaid(PR, INFO, [], { ...BRANCH, head: 'fix/a<b>c' })).toContain('head["fix/a#lt;b#gt;c"]')
+})
+
+test('a head behind its base is amber when GitHub does not require it, and a blocker when it does', async () => {
+  const behind = { ...BRANCH, ahead: 1, behind: 6 }
+  const optional = gates({ ...PR, mergeStateStatus: 'CLEAN' }, INFO, RULES, behind)
+  expect(optional.find(gate => gate.name === 'up-to-date')).toEqual({ name: 'up-to-date', label: '6 behind (not required)', isMet: true, isWarning: true })
+  expect(tones(optional)[3]).toBe('warn')
+  const required = gates({ ...PR, mergeStateStatus: 'BEHIND' }, INFO, undefined, behind)
+  expect(required.find(gate => gate.name === 'up-to-date')).toEqual({ name: 'up-to-date', label: '6 behind base', isMet: false })
+  expect(gates(PR, INFO, RULES, { ...BRANCH, behind: 0 }).find(gate => gate.name === 'up-to-date')?.label).toBe('up to date')
+  expect(gates(PR, INFO, RULES, { ...behind, error: 'x' }).find(gate => gate.name === 'up-to-date')?.label).toBe('up to date')
+  expect(mermaid(PR, INFO, optional, behind)).toContain('g3["6 behind (not required)"]:::warn')
 })

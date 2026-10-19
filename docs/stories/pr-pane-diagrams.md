@@ -7,6 +7,7 @@ tags:
 summary: Merge-readiness gates, the branch's ahead/behind, and a Mermaid export (0.5.0).
 tasks:
   - prs-7
+  - prs-9
 generated:
   by: lore/0.13.0
   at: 2026-10-19T21:22:42.903Z
@@ -35,6 +36,7 @@ picture shareable on the PR itself.
 | Task | Title | Status |
 |---|---|---|
 | [PRS-7](../../.quest/completed/PRS-7.json) | pr-pane 0.5.0: merge-readiness gates, branch view and /prs diagram | Done |
+| [PRS-9](../../.quest/completed/PRS-9.json) | pr-pane 0.6.1: say when a branch is behind but not required to be up to date | Done |
 <!-- lore:tasks:end -->
 
 ## Notes
@@ -58,4 +60,7 @@ picture shareable on the PR itself.
 - **Verified:** mermaid@11.4.1's parser accepts both diagrams, along with 11 awkward branch names
   (checked by evolv-marketplace).
 - **Not verified:** how GitHub draws a posted comment. Nothing was posted during development.
-- **Released:** `v0.5.0` (#9).
+- **Behind but not required:** GitHub reports BEHIND only when the base requires an up-to-date branch. Otherwise a
+  head that is behind reads CLEAN. From 0.6.1 the gate takes the count from the compare API and shows
+  `<n> behind (not required)` in amber (the `warn` tone and Mermaid class) instead of a green `up to date` (PRS-9).
+- **Released:** `v0.5.0` (#9). The behind-gate fix shipped in `v0.6.1`.

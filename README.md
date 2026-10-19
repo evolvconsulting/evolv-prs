@@ -10,6 +10,7 @@ A Claude Code mod that shows the current repo's open pull requests in a pane, us
   - A private repo on GitHub's free plan reads `not readable here`, because GitHub enforces no rules there.
 - **Merge gates and branch:** under the rules, the detail view draws the steps to merge as a chain, `approvals 1/2 ─▶ CODEOWNERS ─▶ checks 4/5 ─▶ up to date ─▶ mergeable`.
   - Met steps are green, the first blocker is red, and later ones are dim. In a narrow pane the chain turns into one step per line.
+  - A branch behind its base shows as `6 behind (not required)` in amber when GitHub doesn't require an up-to-date branch, and as a blocker (`6 behind base`) when it does.
   - Below it, a line shows how far the branch has moved from its base, for example `dev ◀── 3 behind · 5 ahead ── feat/x`.
 - **Mermaid:** `/prs diagram <n>` prints both views as Mermaid and copies them. `/prs diagram <n> --post` posts them as a PR comment, where GitHub draws them. Posting is logged.
 - **Actions:** code review, approve, comment, request changes, merge, update branch, re-run failed checks, open and close.
