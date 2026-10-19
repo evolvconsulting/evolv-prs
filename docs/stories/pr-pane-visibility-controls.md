@@ -9,10 +9,11 @@ tasks:
   - prs-1
   - prs-2
   - prs-3
+  - prs-4
 generated:
   by: lore/0.13.0
   at: 2026-10-19T17:50:47.166Z
-lore_task_status: done
+lore_task_status: in-progress
 ---
 
 # pr-pane visibility controls
@@ -39,6 +40,7 @@ colleague asked for a way to toggle its visibility or expand and collapse it.
 | [PRS-1](../../.quest/completed/PRS-1.json) | pr-pane 0.3.0: /prs toggle, z collapse, autoOpen option | Done |
 | [PRS-2](../../.quest/completed/PRS-2.json) | pr-pane 0.3.1: autoOpen off by default, /prs autoOpen enable\|disable | Done |
 | [PRS-3](../../.quest/completed/PRS-3.json) | pr-pane 0.3.2: /prs autoOpen survives a missing /config row | Done |
+| [PRS-4](../../.quest/tasks/PRS-4.json) | pr-pane 0.3.3: name a configure command that works | In Progress |
 <!-- lore:tasks:end -->
 
 ## Notes
