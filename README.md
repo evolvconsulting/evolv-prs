@@ -35,6 +35,9 @@ To work on it, see `CLAUDE.md`. The plugin itself lives in `plugin/`.
 | `/prs` | Open the pane, or close it if it is showing |
 | `/prs show` | Open the pane and refresh |
 | `/prs hide` | Close the pane |
+| `/prs autoOpen` | Say whether the pane opens at session start |
+| `/prs autoOpen enable` | Open the pane at every session start |
+| `/prs autoOpen disable` | Open the pane only on `/prs` (the default) |
 | `/prs help` | Print every command and hotkey |
 | `/prs log` | Print the last 20 logged actions |
 | `/prs refresh` | Refresh now |
@@ -57,6 +60,6 @@ Merge, update branch and re-run appear only when they apply.
 
 | Option | Default | What it does |
 |---|---|---|
-| `autoOpen` | `true` | Open the pane when a session starts. When off, run `/prs` to open it; the refresh and toasts still run. |
+| `autoOpen` | `false` | Open the pane when a session starts. While it's off, run `/prs` to open the pane. The refresh and toasts run either way. |
 
-Change it in `/config`, where it is a row under pr-pane.
+Change it with `/prs autoOpen enable` or `disable`, or in `/config`, where it's a row under pr-pane. Both write the same setting, so they always agree. If you set it before 0.3.1, your value stays.

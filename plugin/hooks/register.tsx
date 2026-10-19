@@ -2,13 +2,15 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Action, AuditEntry, Detail, Pr, Snapshot } from '../types'
-import { COMMANDS, HELP, KEYS, helpText } from './keys'
+import { COMMANDS, HELP, KEYS, USAGE_WIDTH, helpText } from './keys'
 import {
   DETAIL_FIELDS, FEEDBACK_LABELS, FIELDS, age, agentSignals, approvalWarnings, canMerge, codeownersMatcher,
   created, diffKey, feedbackBody, isBehind, isLarge, merge, mergeWarnings, newPrs, parseDetail, parsePrs, review, reviewState, summary, when,
 } from './prs'
 
 const PANE = 'pr-pane'
+// The autoOpen userConfig field's /config row; /prs autoOpen writes it, so the two never disagree.
+const AUTO_OPEN_ROW = 'pr-pane.autoOpen'
 const POLL_MS = 60_000
 const BODY_LINES = 8
 const REVIEW_ROWS = 6
@@ -174,6 +176,23 @@ async function isShowing($: EngineInterface): Promise<boolean> {
   return (await $.ui.panes()).some(pane => pane.id === PANE && pane.isPlaced && pane.isShown)
 }
 
+async function autoOpen($: EngineInterface, value: string | undefined): Promise<string> {
+  if (value === undefined) {
+    const row = (await $.config.list()).find(one => one.key === AUTO_OPEN_ROW)
+    const isOn = row?.value === true
+    const lock = row?.isLocked === true ? ' Your organization sets it, so it can\'t be changed here.' : ''
+    return `Auto-open is ${isOn ? 'on' : 'off'}: the pane ${isOn ? 'opens at session start' : 'opens only on /prs'}. `
+      + `It's the pr-pane autoOpen row in /config, off by default.${lock}`
+  }
+  if (value !== 'enable' && value !== 'disable') return 'Usage: /prs autoOpen [enable|disable]'
+  const isOn = value === 'enable'
+  const result = await $.config.set({ key: AUTO_OPEN_ROW, value: isOn })
+  if (result.deny !== undefined) return `Auto-open is unchanged: ${result.deny}`
+
+  return `Auto-open is now ${isOn ? 'on: the pane opens at session start' : 'off: the pane opens only on /prs'}. `
+    + 'This is the pr-pane autoOpen row in /config.'
+}
+
 async function setAction($: EngineInterface, value: Action | null): Promise<void> {
   await update($, action, () => value)
 }
@@ -318,13 +337,13 @@ function auditLine(one: AuditEntry): string {
 }
 
 export const register: Register = (on, options) => {
-  const isAutoOpen = options.autoOpen !== false
+  const isAutoOpen = options.autoOpen === true
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'prs',
       description: 'Toggle the open PRs pane for this repo (/prs help lists the hotkeys)',
-      argumentHint: '[show|hide|help|log|refresh]',
+      argumentHint: '[show|hide|help|log|refresh|autoOpen [enable|disable]]',
     })
     const folded = await $.store.get('collapsed')
     if (typeof folded === 'boolean') await update($, collapsed, () => folded)
@@ -339,6 +358,10 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'prs' }, async ($, e) => {
     const arg = e.args.trim()
     if (arg === 'help') return { text: helpText() }
+    const [verb, value, ...rest] = arg.split(/\s+/)
+    if (verb?.toLowerCase() === 'autoopen') {
+      return { text: rest.length > 0 ? 'Usage: /prs autoOpen [enable|disable]' : await autoOpen($, value?.toLowerCase()) }
+    }
     if (arg === 'log') {
       const list = (await read($, audit)).slice(-20)
       return { text: list.length === 0 ? 'No pr-pane actions logged yet.' : list.map(auditLine).join('\n') }
@@ -416,7 +439,7 @@ export const register: Register = (on, options) => {
           <Text bold>Commands</Text>
           {COMMANDS.map(one => (
             <Text wrap="truncate-end">
-              <Text color="suggestion">{one.usage.padEnd(14)}</Text>
+              <Text color="suggestion">{one.usage.padEnd(USAGE_WIDTH)}</Text>
               {one.what}
             </Text>
           ))}

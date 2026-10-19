@@ -6,9 +6,10 @@ const START = { cwd: '/repo', surface: 'terminal', isInteractive: true } as cons
 const TYPED = { origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } } as const
 const PROPS = { title: 'Pull requests', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 20 }, view: {} } as const
 
-// Stands in for the engine beneath the plugin: gh fails, nothing is stored, and the pane calls are recorded.
-function engine(on: On, isShowing = false) {
-  const calls = { opened: 0, closed: 0, stored: [] as unknown[] }
+// Stands in for the engine beneath the plugin: gh fails, nothing is stored, the pane calls are recorded, and
+// the /config row holds what config.set wrote (`deny` refuses every write, as a policy-locked row does).
+function engine(on: On, isShowing = false, deny?: string) {
+  const calls = { opened: 0, closed: 0, stored: [] as unknown[], autoOpen: false }
   on('session.start', async ($, e) => ({ cwd: e.cwd }))
   on('command.register', async ($, e) => ({ value: { command: e.name } }))
   on('process.run', async () => ({ value: { exitCode: 1, stdout: '', stderr: 'offline', isStdoutTruncated: false, isStderrTruncated: false } }))
@@ -31,6 +32,18 @@ function engine(on: On, isShowing = false) {
     calls.closed++
     return { value: undefined }
   })
+  on('config.list', async () => ({
+    value: [{
+      key: 'pr-pane.autoOpen', label: 'Open the pane at session start', kind: 'boolean', value: calls.autoOpen,
+      provider: { plugin: 'pr-pane', tier: 'user' }, isLocked: deny !== undefined,
+    }],
+  }))
+  on('config.set', async ($, e) => {
+    if (deny !== undefined) return { deny }
+    expect(e.key).toBe('pr-pane.autoOpen')
+    calls.autoOpen = e.value === true
+    return { value: e.value }
+  })
 
   return calls
 }
@@ -41,19 +54,43 @@ async function drain($: Engine): Promise<void> {
   for (let i = 0; i < 50; i++) await $.command.run({ ...TYPED, command: 'prs', args: 'help' })
 }
 
-test('opens the pane at session start by default', async ($, on) => {
+test('leaves the pane closed at session start by default; /prs opens it', async ($, on) => {
+  const calls = engine(on)
+  await $.session.start(START)
+  expect(calls.opened).toBe(0)
+  await $.command.run({ ...TYPED, command: 'prs', args: '' })
+  expect(calls.opened).toBe(1)
+  await drain($)
+})
+
+test('autoOpen on opens the pane at session start', { options: { autoOpen: true } }, async ($, on) => {
   const calls = engine(on)
   await $.session.start(START)
   expect(calls.opened).toBe(1)
   await drain($)
 })
 
-test('autoOpen off skips the pane but keeps the command', { options: { autoOpen: false } }, async ($, on) => {
+test('/prs autoOpen writes the /config row and reports it', async ($, on) => {
   const calls = engine(on)
   await $.session.start(START)
+  const say = async (args: string) => (await $.command.run({ ...TYPED, command: 'prs', args })).text
+  expect(await say('autoOpen')).toContain('Auto-open is off')
+  expect(await say('autoOpen enable')).toContain('Auto-open is now on')
+  expect(calls.autoOpen).toBe(true)
+  expect(await say('autoopen')).toContain('Auto-open is on')
+  expect(await say('autoOpen disable')).toContain('Auto-open is now off')
+  expect(calls.autoOpen).toBe(false)
+  expect(await say('autoOpen maybe')).toBe('Usage: /prs autoOpen [enable|disable]')
   expect(calls.opened).toBe(0)
-  await $.command.run({ ...TYPED, command: 'prs', args: '' })
-  expect(calls.opened).toBe(1)
+  await drain($)
+})
+
+test('/prs autoOpen says so when the row is locked', async ($, on) => {
+  engine(on, false, 'Set by your organization.')
+  await $.session.start(START)
+  const run = await $.command.run({ ...TYPED, command: 'prs', args: 'autoOpen enable' })
+  expect(run.text).toBe('Auto-open is unchanged: Set by your organization.')
+  expect((await $.command.run({ ...TYPED, command: 'prs', args: 'autoOpen' })).text).toContain('can\'t be changed here')
   await drain($)
 })
 
@@ -63,7 +100,7 @@ test('/prs closes a showing pane; show and hide are explicit', async ($, on) => 
   await $.command.run({ ...TYPED, command: 'prs', args: '' })
   expect(calls.closed).toBe(1)
   await $.command.run({ ...TYPED, command: 'prs', args: 'show' })
-  expect(calls.opened).toBe(2)
+  expect(calls.opened).toBe(1)
   await $.command.run({ ...TYPED, command: 'prs', args: 'hide' })
   expect(calls.closed).toBe(2)
   await drain($)

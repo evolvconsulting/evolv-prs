@@ -57,13 +57,19 @@ export const COMMANDS = [
   { usage: '/prs', what: 'Open the pane, or close it if it is showing' },
   { usage: '/prs show', what: 'Open the pane and refresh' },
   { usage: '/prs hide', what: 'Close the pane' },
+  { usage: '/prs autoOpen', what: 'Say whether the pane opens at session start' },
+  { usage: '/prs autoOpen enable', what: 'Open the pane at every session start' },
+  { usage: '/prs autoOpen disable', what: 'Open the pane only on /prs (the default)' },
   { usage: '/prs help', what: 'Print the commands and hotkeys' },
   { usage: '/prs log', what: 'Print the last 20 logged actions' },
   { usage: '/prs refresh', what: 'Refresh now' },
 ]
 
+// Wide enough for the longest usage, '/prs autoOpen disable'.
+export const USAGE_WIDTH = 22
+
 export function helpText(): string {
-  const lines = ['Commands:', ...COMMANDS.map(one => `  ${one.usage.padEnd(14)} ${one.what}`), '']
+  const lines = ['Commands:', ...COMMANDS.map(one => `  ${one.usage.padEnd(USAGE_WIDTH)} ${one.what}`), '']
   for (const group of HELP) {
     lines.push(`${group.section}:`)
     for (const row of group.rows) lines.push(`  ${row.key.padEnd(12)} ${row.what}`)
