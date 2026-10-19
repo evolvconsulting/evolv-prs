@@ -79,4 +79,5 @@ test('writes both diagrams as fenced Mermaid', async () => {
   ].join('\n'))
   expect(mermaid(PR, INFO, gates(PR, INFO), { ...BRANCH, error: 'x' })).not.toContain('flowchart RL')
   expect(mermaid({ ...PR }, INFO, [{ name: 'approvals', label: 'say "hi"', isMet: true }])).toContain('g0["say #quot;hi#quot;"]:::met')
+  expect(mermaid(PR, INFO, [], { ...BRANCH, head: 'fix/a<b>c' })).toContain('head["fix/a#lt;b#gt;c"]')
 })

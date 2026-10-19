@@ -14,3 +14,4 @@
 - 2026-10-19T16:12:51-05:00 2bd64804389d2bf3dffd989d5196edea1816d03d pr-pane 0.4.0: read base-branch rules; say why a PR is blocked (PRS-6)
 - 2026-10-19T16:13:51-05:00 73aa8c6f08d4918493a9254d8902b6002fe5d05a Test the CODEOWNERS ownership warning through the pane (PRS-6 AC4)
 - 2026-10-19T16:21:12-05:00 169730eb071f18843fe6358622d424806509b298 pr-pane 0.4.0: read base-branch rules; say why a PR is blocked (PRS-6) (#8)
+- 2026-10-19T16:26:55-05:00 904b88b65be52bd775f0b8ed92660fc7960d4580 pr-pane 0.5.0: merge-readiness gates, branch view and /prs diagram (PRS-7)

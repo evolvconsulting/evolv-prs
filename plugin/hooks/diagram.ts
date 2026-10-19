@@ -53,8 +53,9 @@ export function branchLine(divergence: Divergence | undefined): string {
   return `${divergence.base} ◀── ${divergence.behind} behind · ${divergence.ahead} ahead ── ${divergence.head}`
 }
 
+// Mermaid entity codes keep a branch name literal: a quote would end the label, and <b> would render as HTML.
 function quote(label: string): string {
-  return `"${label.replace(/"/g, '#quot;')}"`
+  return `"${label.replace(/"/g, '#quot;').replace(/</g, '#lt;').replace(/>/g, '#gt;')}"`
 }
 
 // Two Mermaid flowcharts in fences, which GitHub renders in a comment: the gates, then the branch.

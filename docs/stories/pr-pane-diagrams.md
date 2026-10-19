@@ -54,5 +54,7 @@ picture shareable on the PR itself.
   (a headless run) or doesn't include it (LIST_LIMIT).
 - **Posting:** the comment is two fenced Mermaid flowcharts, which GitHub renders. Posting is an outward write,
   so it happens only with an explicit `--post`, and it lands in the action log with the head commit.
-- **Not verified:** no renderer has validated the Mermaid syntax. The plugin ships none, and nothing was posted
-  to a real PR during development.
+- **Labels:** quotes, `<` and `>` become Mermaid entity codes, so a branch name stays literal.
+- **Verified:** mermaid@11.4.1's parser accepts both diagrams, along with 11 awkward branch names
+  (checked by evolv-marketplace).
+- **Not verified:** how GitHub draws a posted comment. Nothing was posted during development.
