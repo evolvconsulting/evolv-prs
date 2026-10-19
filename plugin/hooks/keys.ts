@@ -60,6 +60,7 @@ export const COMMANDS = [
   { usage: '/prs autoOpen', what: 'Say whether the pane opens at session start' },
   { usage: '/prs autoOpen enable', what: 'Open the pane at every session start' },
   { usage: '/prs autoOpen disable', what: 'Open the pane only on /prs (the default)' },
+  { usage: '/prs layout', what: 'Say whether the pane can dock beside the conversation, and how' },
   { usage: '/prs diagram <n>', what: "Print PR n's merge readiness and branch as Mermaid, and copy it" },
   { usage: '/prs diagram <n> --post', what: 'Post that Mermaid as a comment on PR n (logged)' },
   { usage: '/prs help', what: 'Print the commands and hotkeys' },

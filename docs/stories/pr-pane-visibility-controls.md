@@ -11,10 +11,11 @@ tasks:
   - prs-3
   - prs-4
   - prs-5
+  - prs-8
 generated:
   by: lore/0.13.0
   at: 2026-10-19T17:50:47.166Z
-lore_task_status: done
+lore_task_status: in-progress
 ---
 
 # pr-pane visibility controls
@@ -43,6 +44,7 @@ colleague asked for a way to toggle its visibility or expand and collapse it.
 | [PRS-3](../../.quest/completed/PRS-3.json) | pr-pane 0.3.2: /prs autoOpen survives a missing /config row | Done |
 | [PRS-4](../../.quest/completed/PRS-4.json) | pr-pane 0.3.3: name a configure command that works | Done |
 | [PRS-5](../../.quest/completed/PRS-5.json) | pr-pane 0.3.4: make the /prs autoOpen shell hint pasteable | Done |
+| [PRS-8](../../.quest/tasks/PRS-8.json) | pr-pane 0.6.0: tell people how to get the docked pane | In Progress |
 <!-- lore:tasks:end -->
 
 ## Notes
@@ -61,5 +63,13 @@ colleague asked for a way to toggle its visibility or expand and collapse it.
   sentence points other installs at `claude plugin list`.
   - In 0.3.3 the commands used a `<marketplace>` placeholder, which a shell reads as a redirect (PRS-4, PRS-5).
   - A test rejects shell metacharacters and leading spaces in every hint line.
+- **Placement:** Claude Code places the pane, not pr-pane and not the OS.
+  - In the fullscreen layout (`/tui fullscreen`, the `tui` setting) the pane docks beside the conversation from
+    110 columns. Otherwise it sits inline, above the prompt.
+  - pr-pane reads the real layout from `command.run`'s `presentation`, and the pane's `placement`. From 0.6.0 it
+    explains how to get the docked pane, through `/prs layout` and one-time tips (PRS-8). It never changes the
+    setting itself.
+  - The plugin types say tmux defaults to the default layout, but the user docs say fullscreen works in tmux. So
+    pr-pane trusts the live `isFullscreen` value and guesses nothing from the environment.
 - Released as `v0.3.0` (#2), `v0.3.1` (#3), `v0.3.2` (#5), `v0.3.3` (#6) and `v0.3.4` (#7). The evolv marketplace skipped 0.3.1 because of the
   headless bug and moves from `v0.3.0` to `v0.3.2`.
