@@ -1,0 +1,35 @@
+# Gates for the pr-pane plugin. The evolv marketplace installs it from a tag on this
+# repo, so a manifest or hooks module the engine would refuse should go red here first.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Pinned so a Claude Code release can't change this repo's verdict without a commit here.
+  CLAUDE_CLI: '@anthropic-ai/claude-code@2.1.303'
+
+jobs:
+  plugin:
+    name: Plugin validates and its tests pass
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Install the Claude Code CLI
+        run: npm install --global --no-fund --no-audit "$CLAUDE_CLI"
+      - name: claude plugin validate --strict
+        run: claude plugin validate plugin --strict
+      - name: claude plugin test
+        run: claude plugin test plugin

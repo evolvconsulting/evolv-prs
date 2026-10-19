@@ -1,3 +1,45 @@
+# evolv PRs
+
+`pr-pane`, a Claude Code mod (a function-hooks plugin) that shows the current repo's open
+pull requests in a pane via the `gh` CLI, with guarded review and ship actions. See
+`README.md` for what it does, its commands and hotkeys.
+
+## Layout
+
+The plugin lives in `plugin/`, so this repo's own `CLAUDE.md`, `docs/`, `.lore/` and
+`.quest/` are not shipped with it. The marketplace installs it as a `git-subdir` source,
+with `path: plugin`.
+
+- `plugin/.claude-plugin/plugin.json`: the manifest.
+- `plugin/hooks/register.tsx`: the hooks module, named by `plugin/hooks/hooks.json`.
+  - `prs.ts` holds the pure helpers.
+  - `keys.ts` holds the one hotkey table that the buttons, the help view and `/prs help` all read.
+- `plugin/types/index.d.ts`: the `$.state` contract.
+- `plugin/tests/*.test.ts`: run with `claude plugin test plugin`.
+
+## Developing
+
+- Run `claude --plugin-dir ~/repos/evolv-prs/plugin`. Claude Code watches the folder, and a
+  save reloads the module. It also writes the API types into `plugin/.claude-plugin/types/`
+  (git-ignored), which `plugin/tsconfig.json` extends, so `npx tsc -p plugin` type-checks.
+- Before a PR, run `claude plugin validate plugin --strict`, `claude plugin test plugin` and
+  `npx tsc -p plugin`.
+
+## Releasing
+
+The evolv marketplace (`evolvconsulting/evolv-marketplace`) installs this plugin from a tag.
+To release:
+1. Bump `version` in `plugin/.claude-plugin/plugin.json`.
+2. Merge to `dev`.
+3. Tag `vX.Y.Z` on that commit and push the tag.
+4. In the marketplace, bump the `pr-pane` entry's `ref` and `version` to match.
+
+Never point the marketplace at a branch.
+
+## Style
+
+- The company name is **evolv Consulting**: lowercase "e" in "evolv", uppercase "C" in "Consulting".
+
 <!-- quest:agent-instructions:begin -->
 # Quest agent instructions
 
