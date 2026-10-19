@@ -128,6 +128,8 @@ declare module 'claude-code' {
       view: View
       // Folded to one summary line; mirrored to $.store so it outlasts the session.
       collapsed: boolean
+      // The person has run /prs layout, so the layout tips stop; mirrored to $.store.
+      layoutSeen: boolean
       who: Who | null
       diffViewed: string[]
       audit: AuditEntry[]

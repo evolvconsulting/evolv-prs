@@ -321,3 +321,41 @@ test('/prs diagram reads a PR the list does not hold', async ($, on) => {
   expect(text).toContain('head["feat/x"] -- "5 ahead · 3 behind" --> base["dev"]')
   await drain($)
 })
+
+test('/prs layout reports the layout and width from the command, and how to dock the pane', async ($, on) => {
+  engine(on)
+  await $.session.start(START)
+  const layout = async (isFullscreen: boolean, columns: number) =>
+    (await $.command.run({ ...TYPED, presentation: { isFullscreen, columns }, command: 'prs', args: 'layout' })).text
+  expect(await layout(false, 120)).toContain('Layout: default, 120 columns.')
+  expect(await layout(false, 120)).toContain('run /tui fullscreen')
+  expect(await layout(true, 90)).toContain('widen the terminal')
+  expect(await layout(true, 160)).toBe('Layout: fullscreen, 160 columns. The pane docks beside the conversation.')
+  await drain($)
+})
+
+test('the tips show until /prs layout is run, then stop, and the pane tip only while inline', async ($, on) => {
+  const calls = engine(on)
+  await $.session.start(START)
+  await drain($)
+  for (const placement of ['inline', 'dock'] as const) {
+    const ui = await $.ui.mount({ plugin: 'pr-pane', surface: 'terminal', component: 'Pane', props: { ...PROPS, placement }, requestId: 'pr-pane' })
+    expect((await ui.find({ text: /Tip: run \/tui fullscreen/ })) !== undefined).toBe(placement === 'inline')
+    await ui.unmount()
+  }
+  const opened = (await $.command.run({ ...TYPED, command: 'prs', args: 'show' })).text ?? ''
+  expect(opened).toContain('Tip: For the pane docked beside the conversation, run /tui fullscreen')
+  await $.command.run({ ...TYPED, command: 'prs', args: 'layout' })
+  expect(calls.stored).toContain(true)
+  expect((await $.command.run({ ...TYPED, command: 'prs', args: 'show' })).text).not.toContain('Tip:')
+  const ui = await $.ui.mount({ plugin: 'pr-pane', surface: 'terminal', component: 'Pane', props: { ...PROPS, placement: 'inline' }, requestId: 'pr-pane' })
+  expect(await ui.find({ text: /Tip: run \/tui fullscreen/ })).toBeUndefined()
+  await drain($)
+})
+
+test('a headless run gets no layout tip', async ($, on) => {
+  engine(on)
+  await $.session.start({ ...START, surface: null, isInteractive: false })
+  expect((await $.command.run({ ...TYPED, command: 'prs', args: 'show' })).text).not.toContain('Tip:')
+  await drain($)
+})

@@ -3,6 +3,7 @@ import type { ConfigRow, EngineInterface, Register } from 'claude-code'
 
 import type { Action, AuditEntry, Detail, Divergence, Pr, Rules, Snapshot } from '../types'
 import { ARROW, DOWN, branchLine, gateRows, gates, mermaid, tones } from './diagram'
+import { layoutAdvice, layoutReport, layoutTip } from './layout'
 import { COMMANDS, HELP, KEYS, USAGE_WIDTH, helpText } from './keys'
 import {
   DETAIL_FIELDS, FEEDBACK_LABELS, FIELDS, RULES_TTL_MS, age, agentSignals, approvalWarnings, canMerge, codeownersMatcher,
@@ -29,6 +30,7 @@ const detail = atom({ plugin: 'pr-pane', key: 'detail' } as const, null)
 const action = atom({ plugin: 'pr-pane', key: 'action' } as const, null)
 const view = atom({ plugin: 'pr-pane', key: 'view' } as const, 'list')
 const collapsed = atom({ plugin: 'pr-pane', key: 'collapsed' } as const, false)
+const layoutSeen = atom({ plugin: 'pr-pane', key: 'layoutSeen' } as const, false)
 const who = atom({ plugin: 'pr-pane', key: 'who' } as const, null)
 const diffViewed = atom({ plugin: 'pr-pane', key: 'diffViewed' } as const, [])
 const audit = atom({ plugin: 'pr-pane', key: 'audit' } as const, [])
@@ -45,6 +47,8 @@ let teams: string[] = []
 let wasFocused = false
 // Settles once the viewer, repo and CODEOWNERS are loaded; guarded actions wait on it.
 let ready: Promise<void> = Promise.resolve()
+// Layout tips are for a person at a terminal, not a -p run.
+let isInteractive = false
 // One refresh at a time; a refresh asked for meanwhile runs once more after it.
 let refreshing: Promise<void> | null = null
 let isRefreshAgain = false
@@ -485,10 +489,12 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: 'prs',
       description: 'Toggle the open PRs pane for this repo (/prs help lists the hotkeys)',
-      argumentHint: '[show|hide|help|log|refresh|autoOpen [enable|disable]|diagram <n> [--post]]',
+      argumentHint: '[show|hide|help|log|refresh|layout|autoOpen [enable|disable]|diagram <n> [--post]]',
     })
+    isInteractive = e.isInteractive
     const folded = await $.store.get('collapsed')
     if (typeof folded === 'boolean') await update($, collapsed, () => folded)
+    if ((await $.store.get('layoutSeen')) === true) await update($, layoutSeen, () => true)
     ready = loadContext($)
     void ready.then(() => refresh($))
     $.clock.every(POLL_MS, () => void refresh($))
@@ -500,6 +506,11 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'prs' }, async ($, e) => {
     const arg = e.args.trim()
     if (arg === 'help') return { text: helpText() }
+    if (arg === 'layout') {
+      await update($, layoutSeen, () => true)
+      await $.store.set('layoutSeen', true)
+      return { text: layoutReport(e.presentation.isFullscreen, e.presentation.columns) }
+    }
     const [verb, value, ...rest] = arg.split(/\s+/)
     if (verb?.toLowerCase() === 'diagram') {
       const n = Number(value?.replace(/^#/, ''))
@@ -521,8 +532,9 @@ export const register: Register = (on, options) => {
     void refresh($)
     if (arg === 'refresh') return { text: 'Refreshing open PRs.' }
     await $.ui.open({ id: PANE, title: 'Pull requests' })
+    const advice = isInteractive && !(await read($, layoutSeen)) ? layoutAdvice(e.presentation.isFullscreen, e.presentation.columns) : null
 
-    return { text: 'Pull requests pane opened. Press h in the pane, or run /prs help, for hotkeys.' }
+    return { text: `Pull requests pane opened. Press h in the pane, or run /prs help, for hotkeys.${advice === null ? '' : `\nTip: ${advice}`}` }
   })
 
   // Esc never reaches a plugin: it hands the keys back. Help and log are drawn only while the
@@ -649,6 +661,9 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column" width={width}>
         {header}
+        {e.surface === 'terminal' && e.props.placement === 'inline' && !(await read($, layoutSeen)) && (
+          <Text key="layout-tip" dimColor wrap="truncate-end">{layoutTip(e.viewport?.isFullscreen)}</Text>
+        )}
         {snap.error !== null && <Text color="error">{snap.error}</Text>}
         {snap.error === null && snap.prs.length === 0 && <Text dimColor>No open PRs.</Text>}
         {snap.prs.map((one, index) => {

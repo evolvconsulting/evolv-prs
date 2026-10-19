@@ -32,6 +32,19 @@ A Claude Code mod that shows the current repo's open pull requests in a pane, us
 
 To work on it, see `CLAUDE.md`. The plugin itself lives in `plugin/`.
 
+## Where the pane shows
+
+Claude Code decides where the pane goes, based on its layout and the terminal's width, not the operating system:
+
+- **Docked beside the conversation:** in the fullscreen layout, when the terminal is at least 110 columns wide.
+- **Below the conversation, above the prompt:** in the default layout, or in a narrower terminal.
+
+For the docked pane, run `/tui fullscreen`. It saves `"tui": "fullscreen"` in your settings and relaunches,
+keeping the conversation. `/tui default` switches back. `/prs layout` reports your current layout and width, with
+the same advice. Until you run `/prs layout`, pr-pane shows this as a tip when it opens and while the pane sits
+below. In tmux, fullscreen works, and mouse scrolling needs `set -g mouse on`. pr-pane never changes the layout
+itself.
+
 ## Requirements
 
 - `gh` installed and authenticated (`gh auth login`), run from inside a GitHub repo.
@@ -47,6 +60,7 @@ To work on it, see `CLAUDE.md`. The plugin itself lives in `plugin/`.
 | `/prs autoOpen` | Say whether the pane opens at session start |
 | `/prs autoOpen enable` | Open the pane at every session start |
 | `/prs autoOpen disable` | Open the pane only on `/prs` (the default) |
+| `/prs layout` | Say whether the pane can dock beside the conversation, and how |
 | `/prs diagram <n>` | Print PR n's merge gates and branch as Mermaid, and copy it |
 | `/prs diagram <n> --post` | Post that Mermaid as a comment on PR n; logged |
 | `/prs help` | Print every command and hotkey |
