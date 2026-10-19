@@ -191,7 +191,7 @@ test('/prs autoOpen reports a rejected write instead of failing', async ($, on) 
 
 // One PR, #7, into dev, whose ruleset needs one approval from someone other than the last pusher; the viewer
 // (`rev`) authored the head commit.
-function repo(rules: unknown): Gh {
+function repo(rules: unknown, codeowners?: string, teams: string[] = []): Gh {
   const PR = {
     number: 7, title: 'Fix', author: { login: 'dev' }, headRefName: 'feat/x', createdAt: '2026-10-19T10:00:00Z',
     isDraft: false, reviewDecision: 'REVIEW_REQUIRED', mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED',
@@ -212,6 +212,8 @@ function repo(rules: unknown): Gh {
     if (path.endsWith('/files?per_page=100')) return { ok: true, out: 'src/a.ts\n' }
     if (path.endsWith('/rules/branches/dev')) return { ok: true, out: JSON.stringify(rules) }
     if (path.endsWith('/commits/abc1234def')) return { ok: true, out: 'rev rev\n' }
+    if (path.endsWith('/contents/.github/CODEOWNERS') && codeowners !== undefined) return { ok: true, out: codeowners }
+    if (sub === '--paginate' && argv.includes('user/teams')) return { ok: true, out: teams.map(team => `${team}\n`).join('') }
     return { ok: false, err: 'gh: Not Found (HTTP 404)' }
   }
 }
@@ -239,3 +241,22 @@ test('the detail view shows the rules, refuses the last pusher, and refetches ru
   expect(fetches()).toBe(2)
   await drain($)
 })
+
+// The branch requires a code owner's review; CODEOWNERS gives src/ to org/core and the rest to org/web.
+for (const [teams, isWarned] of [[['org/web'], true], [['org/core'], false]] as const) {
+  test(`approve ${isWarned ? 'warns' : "doesn't warn"} a member of ${teams[0]} about code owner review`, async ($, on) => {
+    const required = [{ type: 'pull_request', parameters: { required_approving_review_count: 1, require_code_owner_review: true } }]
+    const calls = engine(on, { gh: repo(required, '* @org/web\n/src/ @org/core\n', [...teams]) })
+    await $.session.start(START)
+    await drain($)
+    const ui = await $.ui.mount({ plugin: 'pr-pane', surface: 'terminal', component: 'Pane', props: PROPS, requestId: 'pr-pane' })
+    await ui.press({ key: 'row-7' })
+    await ui.press({ key: 'approve' })
+    const warning = await ui.find({ text: /dev requires a code owner's review, and you don't own any changed path/ })
+    expect(warning !== undefined).toBe(isWarned)
+    // src/a.ts is owned in CODEOWNERS, which approve already treats as sensitive, so both cases pause to confirm.
+    expect(await ui.find({ text: /Touches workflow, CODEOWNERS or auth paths: src\/a.ts/ })).toBeDefined()
+    expect(calls.gh.some(argv => argv[0] === 'pr' && argv[1] === 'review')).toBe(false)
+    await drain($)
+  })
+}
